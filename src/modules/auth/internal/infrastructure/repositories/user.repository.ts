@@ -1,6 +1,7 @@
 // cypod-telemetry
 // src/modules/auth/internal/infrastructure/repositories/user.repository.ts
 import { Injectable, Inject } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { IUserRepository } from '../../domain/repositories/user.repo.interface';
 import { User } from '../../domain/entities/user.aggregate';
 import { Email } from '../../domain/value-objects/email.vo';
@@ -14,6 +15,12 @@ export class UserRepository implements IUserRepository {
         @Inject(IAuthPrismaClient) private readonly prisma: IAuthPrismaClient,
         private readonly userMapper: UserMapper,
     ) {}
+
+    // note: the repo owns the id strategy (uuid here) — swapping to cuid/db sequence never touches
+    // the domain or application layer.
+    generateId(): string {
+        return randomUUID();
+    }
 
     async getById(id: UserId): Promise<User | null> {
         const userEntity = await this.prisma.user.findUnique({

@@ -1,7 +1,6 @@
 // cypod-telemetry
 // src/modules/auth/internal/application/commands/register/register.handler.ts
 import { Injectable, Inject } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 import { CommandHandlerBase } from 'src/shared/application/command.handler.base';
 import { IUserRepository } from '../../../domain/repositories/user.repo.interface';
 import { ITokenGenerator } from '../../contracts/token-generator.interface';
@@ -34,7 +33,7 @@ export class RegisterHandler extends CommandHandlerBase<
         }
 
         const user = await User.create({
-            id: randomUUID(),
+            id: this.userRepository.generateId(),
             email: command.email,
             password: command.password,
             firstName: command.firstName,
