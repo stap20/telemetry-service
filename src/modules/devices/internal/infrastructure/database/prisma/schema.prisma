@@ -23,3 +23,43 @@ model Device {
   @@index([ownerId])
   @@map("devices")
 }
+
+// note: one immutable row per accepted reading — the raw event log. `id` is server-generated (a
+// reading has no natural external identity, unlike Device.id which the physical device carries).
+// `deviceId` is stored by value with NO foreign key: same modular-monolith rule as Device.ownerId —
+// telemetry could later move to its own DB, so cross-concept identity is a plain string, not a join.
+// battery is a whole percent (0-100); temperature/lat/lng are floats. Indexed by (deviceId,
+// recordedAt) because every read is "the latest readings for one device".
+model TelemetryEvent {
+  id          String   @id
+  deviceId    String
+  battery     Int
+  temperature Float
+  lat         Float
+  lng         Float
+  status      String
+  recordedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([deviceId, recordedAt])
+  @@map("telemetry_events")
+}
+
+// note: alerts are persisted (not just logged) so a breach is auditable and queryable — a future
+// GET /devices/:id/alerts drops straight in. Written by the alert event-handler reacting to a
+// TelemetryThresholdBreachedEvent, NOT on the ingestion write path: raising the alert is a
+// downstream side effect, so the POST stays fast and a failing alert never rejects a valid reading.
+// `value` is the reading that breached, `threshold` the limit it crossed; both kept for the record.
+model Alert {
+  id          String   @id
+  deviceId    String
+  type        String
+  message     String
+  value       Float
+  threshold   Float
+  triggeredAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+  @@map("alerts")
+}
