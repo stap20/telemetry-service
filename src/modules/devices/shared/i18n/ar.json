@@ -1,0 +1,10 @@
+{
+  "devices.device_id_empty": "لا يمكن أن يكون معرّف الجهاز فارغًا",
+  "devices.device_id_invalid_format": "يجب أن يتكوّن معرّف الجهاز من 3 إلى 100 حرفًا وأن يحتوي فقط على أحرف وأرقام ونقطة وشرطة وشرطة سفلية",
+  "devices.device_name_empty": "لا يمكن أن يكون اسم الجهاز فارغًا",
+  "devices.device_name_too_short": "يجب ألا يقل اسم الجهاز عن {min} حرفين",
+  "devices.device_name_too_long": "لا يمكن أن يزيد اسم الجهاز عن {max} حرفًا",
+  "devices.device_owner_empty": "لا يمكن أن يكون معرّف مالك الجهاز فارغًا",
+  "devices.device_owner_invalid_format": "يجب أن يكون معرّف مالك الجهاز معرّف UUID صالحًا",
+  "devices.device_already_exists": "الجهاز الذي يحمل المعرّف {id} مُسجَّل بالفعل"
+}
