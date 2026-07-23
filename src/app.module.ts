@@ -1,12 +1,9 @@
 // cypod-telemetry
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule } from './shared/infrastructure/config/config.module';
+import { CacheModule } from './shared/infrastructure/cache/cache.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
-  ],
+  imports: [ConfigModule, CacheModule],
 })
 export class AppModule {}

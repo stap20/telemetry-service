@@ -43,6 +43,10 @@ async function bootstrap() {
 
     app.setGlobalPrefix('api');
 
+    // note: required for OnApplicationShutdown/OnModuleDestroy hooks (e.g. RedisConnection.quit())
+    // to actually run on SIGINT/SIGTERM — without it, connection cleanup never fires.
+    app.enableShutdownHooks();
+
     const logger = new NestLogger();
 
     app.useGlobalFilters(
