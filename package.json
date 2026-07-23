@@ -28,7 +28,8 @@
     "devices:db:migrate": "prisma migrate dev --config=./src/modules/devices/internal/infrastructure/database/prisma/prisma.config.ts",
     "devices:db:deploy": "prisma migrate deploy --config=./src/modules/devices/internal/infrastructure/database/prisma/prisma.config.ts",
     "devices:db:studio": "prisma studio --config=./src/modules/devices/internal/infrastructure/database/prisma/prisma.config.ts",
-    "postinstall": "npm run auth:db:generate && npm run devices:db:generate"
+    "postinstall": "npm run auth:db:generate && npm run devices:db:generate",
+    "ingest:sample": "ts-node -P tsconfig.json scripts/ingest-sample-data.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
