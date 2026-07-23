@@ -101,31 +101,32 @@ rejected         : 6
 alerts raised    : 10
 ```
 
-**The two biggest findings were not dirty rows — they were my own wrong assumptions.**
+Every decision below follows one rule: **reject when repairing the row would mean inventing data;
+accept when there is exactly one thing it could have meant.** `battery: "88"` has a single possible
+intent, so it is coerced. `battery: 127` has no correct value to substitute — clamping it to 100
+would hide a broken sensor behind a plausible number — so it is refused.
 
-### 1. The status vocabulary was invented, and wrong
+### The two biggest findings were not dirty rows — they were my own wrong assumptions
 
-I had modelled `status` as `ONLINE | OFFLINE | IDLE | ERROR`. Not one of the 529 readings uses any
-of those words. The hardware says `OK` and `FAULT`. Every single row would have been rejected.
+| I had modelled | The fleet actually sends | Rows affected |
+|---|---|---|
+| `status` as `ONLINE \| OFFLINE \| IDLE \| ERROR` | `OK` and `FAULT` | all 529 |
+| `battery` as `@IsInt()` and an `Int` column | fractional percents — `27.7`, `76.9` | 471 of 528 |
 
-I adopted the fleet's vocabulary rather than translating at the edge. Mapping `OK → ONLINE` would
+Either one alone meant the endpoint could not ingest a single row of the file before this work.
+
+I adopted the fleet's vocabulary rather than translating at the edge: mapping `OK → ONLINE` would
 have looked tidier and would have destroyed the distinction between what the device said and what I
-decided it meant. A device vocabulary is part of the integration contract; the devices win.
+decided it meant. A device vocabulary is part of the integration contract; the devices win. Battery
+became a `Float` for the same reason — rounding at the edge throws away real precision to satisfy a
+constraint nothing had asked for.
 
-### 2. Battery was an integer, and isn't
-
-I had `battery` as `@IsInt()` and an `Int` column. 471 of the 528 numeric readings carry a
-fractional percent (`27.7`, `76.9`). Rounding at the edge would have thrown away real precision to
-satisfy a constraint nothing had asked for, so the column became `Float`.
-
-Together these two meant the endpoint could not ingest a single row of the file before this work.
-
-### 3. The seeded anomalies
+### The seeded anomalies
 
 | What | Rows | Decision | API returns |
 |---|---|---|---|
 | `DEV-9999` — never registered | 4 | **Reject.** Accepting would let anyone create a device by posting to it, and telemetry attributed to an unknown owner is unreadable by every query in the system. | `404` |
-| `battery: 127`, `battery: -5` | 2 | **Reject.** Outside 0–100 is physically impossible and cannot be repaired without inventing data — clamping 127 to 100 would hide a broken sensor behind a plausible number. | `400` |
+| `battery: 127`, `battery: -5` | 2 | **Reject.** Outside 0–100 is physically impossible, and there is no correct value to substitute. | `400` |
 | `battery: "88"` (string) | 1 | **Accept, coerce to `88`.** An unambiguous JSON typing slip with exactly one possible intent. | `201` |
 | `temperature: 850` with `status: FAULT` | 1 | **Accept, store, and alert.** The physical-plausibility bound (−273.15 to 1000 °C) is deliberately not the alert threshold: 850 °C is a valid reading describing a device on fire or a failed sensor, and the device *itself* says `FAULT`. Dropping it would silently discard the most alarming reading in the file. | `201`, 1 alert |
 | `lat: null, lng: null` | 1 | **Accept without a position.** No GPS fix is an ordinary condition; battery and temperature are still valid and are what the alert rules run on. Storing `0,0` would put the device in the Atlantic. One coordinate without the other is now rejected — that is a lost field, not a device without a fix. | `201` |
