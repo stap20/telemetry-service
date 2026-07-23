@@ -37,7 +37,10 @@ export function printBanner(env: string, envFile: string, timestamp: string, por
   console.log(line(`⏰ Started: ${timestamp}`));
   console.log(line());
   console.log(line(`📘 API Docs: http://localhost:${port}/api`));
-  console.log(line(`❤️  Health:  http://localhost:${port}/api/v1/heartbeat`));
+  // note: the health line that used to sit here advertised /api/v1/heartbeat, which no controller
+  // ever implemented — the banner promised a 200 and the route returned 404. Removed rather than
+  // implemented because a health endpoint is not part of this task; it goes in with the
+  // docker-compose work, where a healthcheck actually needs one.
   console.log(line());
   console.log(borderBot);
   console.log('');

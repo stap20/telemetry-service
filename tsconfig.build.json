@@ -5,6 +5,11 @@
     "test",
     "dist",
     "**/*spec.ts",
+    // note: excluded so the production build compiles src/ ALONE. With scripts/ in the input set,
+    // TypeScript infers the common root as the project directory and emits dist/src/main.js instead
+    // of dist/main.js — which silently breaks `npm run start:prod`. The ingest script is run through
+    // ts-node against tsconfig.json, so it is still type-checked; it just is not shipped.
+    "scripts",
     // note: Prisma filters excluded from the build until the schema/client is generated (deferred).
     // Remove these two lines after `prisma generate` to bring the filters back into compilation.
     "src/shared/infrastructure/filters/prisma-known-exception.filter.ts",

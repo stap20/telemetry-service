@@ -32,8 +32,7 @@ npm run devices:db:deploy
 npm run start:dev
 ```
 
-Swagger UI is at `http://localhost:3000/api`, health at `/api/v1/heartbeat`. All routes are prefixed
-`/api/v1`.
+Swagger UI is at `http://localhost:3000/api`. All API routes are prefixed `/api/v1`.
 
 ```bash
 npm test                    # the three tests
@@ -325,7 +324,10 @@ HTTP request against real Postgres and Redis. I verified those paths manually an
 
 ### What I'd do next, in order
 
-1. `docker-compose.yml` for Postgres + Redis, so the whole thing starts with one command.
+1. `docker-compose.yml` for Postgres + Redis, so the whole thing starts with one command — and a
+   real health endpoint alongside it, which the compose healthcheck needs. (The startup banner used
+   to advertise `/api/v1/heartbeat`; no controller ever implemented it, so the banner now stays
+   quiet rather than promising a route that returns 404.)
 2. The React dashboard, since it is a stated requirement and currently absent.
 3. An e2e suite covering the ingest → cache → read path against real infrastructure.
 4. Compare-and-set on the cached latest state. The current guard is a read-modify-write, so two
