@@ -4,7 +4,10 @@ import { Module } from '@nestjs/common';
 
 import { SecurityModule } from 'src/modules/security/shared/security.module';
 
-import { AuthController } from '../internal/presentation/controllers/auth.controller';
+import { RegisterController } from '../internal/presentation/controllers/register.controller';
+import { LoginController } from '../internal/presentation/controllers/login.controller';
+import { LogoutController } from '../internal/presentation/controllers/logout.controller';
+import { AuthCookieService } from '../internal/presentation/services/auth-cookie.service';
 
 import { AuthenticateHandler } from '../internal/application/commands/authenticate/authenticate.handler';
 import { RegisterHandler } from '../internal/application/commands/register/register.handler';
@@ -32,9 +35,10 @@ import { IAuthPrismaClient } from '../internal/infrastructure/database/auth.pris
         AuthenticateHandler,
         RegisterHandler,
         UserMapper,
+        AuthCookieService,
         { provide: IUserRepository, useClass: UserRepository },
         { provide: ITokenGenerator, useClass: JwtTokenGenerator },
     ],
-    controllers: [AuthController],
+    controllers: [RegisterController, LoginController, LogoutController],
 })
 export class AuthModule {}
