@@ -1,0 +1,12 @@
+{
+  "auth.user_already_exists": "المستخدم صاحب البريد الإلكتروني {email} موجود بالفعل",
+  "auth.invalid_credentials": "بيانات الاعتماد المقدمة غير صحيحة",
+  "auth.user_not_found": "لم يتم العثور على مستخدم بالبيانات المقدمة",
+  "auth.user_inactive": "حساب المستخدم غير مُفعّل",
+  "auth.invalid_email": "صيغة البريد الإلكتروني غير صالحة: {email}",
+  "auth.password_too_short": "يجب ألا تقل كلمة المرور عن {min} أحرف",
+  "auth.name_empty": "لا يمكن أن يكون {field} فارغًا",
+  "auth.name_too_short": "يجب ألا يقل {field} عن حرفين",
+  "auth.name_too_long": "لا يمكن أن يزيد {field} عن 50 حرفًا",
+  "auth.name_invalid_format": "يحتوي {field} على أحرف غير صالحة"
+}

@@ -1,0 +1,4 @@
+{
+  "security.no_token": "No authentication token provided",
+  "security.invalid_token": "Invalid or expired authentication token"
+}
