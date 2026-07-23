@@ -13,6 +13,7 @@ import { ListDevicesController } from '../internal/presentation/controllers/list
 import { RecordTelemetryController } from '../internal/presentation/controllers/record-telemetry.controller';
 import { GetLatestDeviceStateController } from '../internal/presentation/controllers/get-latest-device-state.controller';
 import { GetDeviceHistoryController } from '../internal/presentation/controllers/get-device-history.controller';
+import { ListActiveAlertsController } from '../internal/presentation/controllers/list-active-alerts.controller';
 
 import { RegisterDeviceHandler } from '../internal/application/commands/register-device/register-device.handler';
 import { RecordTelemetryHandler } from '../internal/application/commands/record-telemetry/record-telemetry.handler';
@@ -25,6 +26,7 @@ import { IAlertRepository } from '../internal/domain/repositories/alert.repo.int
 import { IListDevicesHandler } from '../internal/application/queries/list-devices/list-devices.handler.interface';
 import { IGetLatestDeviceStateHandler } from '../internal/application/queries/get-latest-device-state/get-latest-device-state.handler.interface';
 import { IGetDeviceHistoryHandler } from '../internal/application/queries/get-device-history/get-device-history.handler.interface';
+import { IListActiveAlertsHandler } from '../internal/application/queries/list-active-alerts/list-active-alerts.handler.interface';
 import { IDeviceStateCache } from '../internal/application/contracts/device-state-cache.interface';
 import { ITelemetryThresholdsProvider } from '../internal/application/contracts/telemetry-thresholds.provider.interface';
 
@@ -34,11 +36,13 @@ import { AlertMapper } from '../internal/infrastructure/database/mappers/alert.m
 import { DeviceRepository } from '../internal/infrastructure/repositories/device.repository';
 import { ReadDeviceRepository } from '../internal/infrastructure/repositories/read-device.repository';
 import { ReadTelemetryRepository } from '../internal/infrastructure/repositories/read-telemetry.repository';
+import { ReadAlertRepository } from '../internal/infrastructure/repositories/read-alert.repository';
 import { TelemetryEventRepository } from '../internal/infrastructure/repositories/telemetry-event.repository';
 import { AlertRepository } from '../internal/infrastructure/repositories/alert.repository';
 import { ListDevicesHandler } from '../internal/infrastructure/query-handlers/list-devices.handler';
 import { GetLatestDeviceStateHandler } from '../internal/infrastructure/query-handlers/get-latest-device-state.handler';
 import { GetDeviceHistoryHandler } from '../internal/infrastructure/query-handlers/get-device-history.handler';
+import { ListActiveAlertsHandler } from '../internal/infrastructure/query-handlers/list-active-alerts.handler';
 import { DeviceStateCache } from '../internal/infrastructure/services/device-state.cache';
 import { TelemetryThresholdsProvider } from '../internal/infrastructure/services/telemetry-thresholds.provider';
 import { DevicesPrismaConnection } from '../internal/infrastructure/database/devices-prisma.connection';
@@ -68,6 +72,7 @@ import { IDevicesPrismaClient } from '../internal/infrastructure/database/device
         AlertMapper,
         ReadDeviceRepository,
         ReadTelemetryRepository,
+        ReadAlertRepository,
         { provide: IDeviceRepository, useClass: DeviceRepository },
         {
             provide: ITelemetryEventRepository,
@@ -85,6 +90,10 @@ import { IDevicesPrismaClient } from '../internal/infrastructure/database/device
             useClass: GetLatestDeviceStateHandler,
         },
         { provide: IGetDeviceHistoryHandler, useClass: GetDeviceHistoryHandler },
+        {
+            provide: IListActiveAlertsHandler,
+            useClass: ListActiveAlertsHandler,
+        },
     ],
     controllers: [
         RegisterDeviceController,
@@ -92,6 +101,7 @@ import { IDevicesPrismaClient } from '../internal/infrastructure/database/device
         RecordTelemetryController,
         GetLatestDeviceStateController,
         GetDeviceHistoryController,
+        ListActiveAlertsController,
     ],
 })
 export class DevicesModule implements OnModuleInit {
