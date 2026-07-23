@@ -1,7 +1,7 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class InvalidLatitudeError extends DomainError {
+export class InvalidLatitudeError extends ValidationDomainError {
     constructor(min: number, max: number) {
         super(
             `Latitude must be between ${min} and ${max}`,
@@ -11,7 +11,7 @@ export class InvalidLatitudeError extends DomainError {
     }
 }
 
-export class InvalidLongitudeError extends DomainError {
+export class InvalidLongitudeError extends ValidationDomainError {
     constructor(min: number, max: number) {
         super(
             `Longitude must be between ${min} and ${max}`,

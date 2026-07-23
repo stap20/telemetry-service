@@ -1,7 +1,7 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class InvalidTemperatureError extends DomainError {
+export class InvalidTemperatureError extends ValidationDomainError {
     constructor() {
         super(
             'Temperature must be a valid number',
@@ -10,7 +10,7 @@ export class InvalidTemperatureError extends DomainError {
     }
 }
 
-export class TemperatureOutOfRangeError extends DomainError {
+export class TemperatureOutOfRangeError extends ValidationDomainError {
     constructor(min: number, max: number) {
         super(
             `Temperature must be between ${min} and ${max} degrees Celsius`,

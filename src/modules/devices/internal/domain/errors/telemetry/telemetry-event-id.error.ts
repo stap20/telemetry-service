@@ -1,7 +1,7 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class EmptyTelemetryEventIdError extends DomainError {
+export class EmptyTelemetryEventIdError extends ValidationDomainError {
     constructor() {
         super(
             'Telemetry event id cannot be empty',
@@ -10,7 +10,7 @@ export class EmptyTelemetryEventIdError extends DomainError {
     }
 }
 
-export class InvalidTelemetryEventIdFormatError extends DomainError {
+export class InvalidTelemetryEventIdFormatError extends ValidationDomainError {
     constructor() {
         super(
             'Telemetry event id must be a valid UUID',

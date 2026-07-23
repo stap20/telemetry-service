@@ -1,13 +1,13 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class EmptyAlertIdError extends DomainError {
+export class EmptyAlertIdError extends ValidationDomainError {
     constructor() {
         super('Alert id cannot be empty', 'devices.alert_id_empty');
     }
 }
 
-export class InvalidAlertIdFormatError extends DomainError {
+export class InvalidAlertIdFormatError extends ValidationDomainError {
     constructor() {
         super(
             'Alert id must be a valid UUID',
@@ -16,7 +16,7 @@ export class InvalidAlertIdFormatError extends DomainError {
     }
 }
 
-export class InvalidAlertTypeError extends DomainError {
+export class InvalidAlertTypeError extends ValidationDomainError {
     constructor(allowed: string) {
         super(
             `Alert type must be one of: ${allowed}`,

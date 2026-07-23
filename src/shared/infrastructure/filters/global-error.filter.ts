@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { DomainError } from '../../domain/errors/domain.error';
 import { NotFoundDomainError } from '../../domain/errors/not-found.domain.error';
+import { ValidationDomainError } from '../../domain/errors/validation.domain.error';
 import { ApplicationError } from '../../application/errors/application.error';
 import { InfrastructureError } from '../errors/infrastructure.error';
 import { BadRequestError } from '../../application/errors/bad-request.error';
@@ -59,6 +60,10 @@ export class GlobalErrorFilter implements ExceptionFilter {
         } else {
             if (error instanceof NotFoundDomainError) {
                 status = HttpStatus.NOT_FOUND;
+            } else if (error instanceof ValidationDomainError) {
+                // note: must precede the generic DomainError branch — it is a subclass, so the
+                // order of these checks is what decides 400 vs 409.
+                status = HttpStatus.BAD_REQUEST;
             } else if (error instanceof DomainError) {
                 status = HttpStatus.CONFLICT;
             } else if (error instanceof ConflictError) {

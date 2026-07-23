@@ -1,13 +1,13 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class EmptyDeviceStatusError extends DomainError {
+export class EmptyDeviceStatusError extends ValidationDomainError {
     constructor() {
         super('Device status cannot be empty', 'devices.device_status_empty');
     }
 }
 
-export class InvalidDeviceStatusError extends DomainError {
+export class InvalidDeviceStatusError extends ValidationDomainError {
     constructor(allowed: string) {
         super(
             `Device status must be one of: ${allowed}`,

@@ -1,7 +1,7 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class InvalidBatteryLevelError extends DomainError {
+export class InvalidBatteryLevelError extends ValidationDomainError {
     constructor() {
         super(
             'Battery level must be a whole number',
@@ -10,7 +10,7 @@ export class InvalidBatteryLevelError extends DomainError {
     }
 }
 
-export class BatteryLevelOutOfRangeError extends DomainError {
+export class BatteryLevelOutOfRangeError extends ValidationDomainError {
     constructor(min: number, max: number) {
         super(
             `Battery level must be between ${min} and ${max}`,
