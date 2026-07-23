@@ -1,13 +1,13 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class EmptyDeviceNameError extends DomainError {
+export class EmptyDeviceNameError extends ValidationDomainError {
     constructor() {
         super('Device name cannot be empty', 'devices.device_name_empty');
     }
 }
 
-export class DeviceNameTooShortError extends DomainError {
+export class DeviceNameTooShortError extends ValidationDomainError {
     constructor(min: number) {
         super(
             `Device name must be at least ${min} characters long`,
@@ -17,7 +17,7 @@ export class DeviceNameTooShortError extends DomainError {
     }
 }
 
-export class DeviceNameTooLongError extends DomainError {
+export class DeviceNameTooLongError extends ValidationDomainError {
     constructor(max: number) {
         super(
             `Device name cannot be longer than ${max} characters`,
