@@ -3,6 +3,10 @@ export class ValueValidator {
 
     static PHONE_NUMBER_PATTERN_LIST = [/^(?:\+?20|0)?1[0125]\d{8}$/];
     static URL_WITH_EXTENSION_PATTERN = /^https?:\/\/[^\s]+\.[a-zA-Z0-9]+$/;
+    // note: a hardware/serial device id — letters, digits, dot, dash, underscore, 3–100 chars. Not a
+    // UUID: a physical device carries its own vendor id, so we constrain the shape without dictating
+    // the scheme. Bounding length + charset here also keeps junk/control chars out of the persisted id.
+    static DEVICE_ID_PATTERN = /^[a-zA-Z0-9._-]{3,100}$/;
 
     static isEmpty(value: string): boolean {
         return !value || value.trim().length === 0;
@@ -72,5 +76,9 @@ export class ValueValidator {
     }
     static isValidUrlWithExtension(value: string): boolean {
         return this.URL_WITH_EXTENSION_PATTERN.test(value);
+    }
+
+    static isValidDeviceId(value: string): boolean {
+        return this.DEVICE_ID_PATTERN.test(value);
     }
 }

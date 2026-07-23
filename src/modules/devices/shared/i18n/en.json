@@ -1,0 +1,10 @@
+{
+  "devices.device_id_empty": "Device id cannot be empty",
+  "devices.device_id_invalid_format": "Device id must be 3-100 characters and contain only letters, digits, dot, dash or underscore",
+  "devices.device_name_empty": "Device name cannot be empty",
+  "devices.device_name_too_short": "Device name must be at least {min} characters long",
+  "devices.device_name_too_long": "Device name cannot be longer than {max} characters",
+  "devices.device_owner_empty": "Device owner id cannot be empty",
+  "devices.device_owner_invalid_format": "Device owner id must be a valid UUID",
+  "devices.device_already_exists": "Device with id {id} is already registered"
+}
