@@ -102,6 +102,16 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
     // on its own thanks to the TTL.
     private async refreshLatestState(reading: TelemetryReading): Promise<void> {
         try {
+            // note: "latest" means latest by recordedAt, not last received. A device that buffered
+            // readings while offline replays them out of order, and writing each one as it arrives
+            // would leave the cache holding an older state than the database — so a cache hit and a
+            // cache miss would answer the same question differently, which is the one thing a
+            // read-through cache must never do. Superseded readings are still stored; they just do
+            // not get to claim the title.
+            if (await this.isSupersededBy(reading)) {
+                return;
+            }
+
             await this.deviceStateCache.saveLatest({
                 deviceId: reading.getDeviceId().value,
                 battery: reading.getBattery().value,
@@ -118,5 +128,25 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
                 { deviceId: reading.getDeviceId().value },
             );
         }
+    }
+
+    // note: a read-modify-write, so two readings for the same device landing at once can still
+    // interleave and let the older one win. That is tolerable precisely because the cache is not
+    // the source of truth — the TTL expires the wrong answer and the next reading corrects it,
+    // while the database stays right the whole time. Closing the race properly needs a compare-
+    // and-set in the cache itself, which is the trade this comment exists to make visible rather
+    // than to hide.
+    private async isSupersededBy(reading: TelemetryReading): Promise<boolean> {
+        const cached = await this.deviceStateCache.findLatest(
+            reading.getDeviceId().value,
+        );
+
+        if (!cached) {
+            return false;
+        }
+
+        return (
+            new Date(cached.recordedAt) >= reading.getRecordedAt().value
+        );
     }
 }
