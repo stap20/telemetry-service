@@ -15,6 +15,7 @@ import { RecordTelemetryController } from '../internal/presentation/controllers/
 import { RegisterDeviceHandler } from '../internal/application/commands/register-device/register-device.handler';
 import { RecordTelemetryHandler } from '../internal/application/commands/record-telemetry/record-telemetry.handler';
 import { TelemetryThresholdBreachedHandler } from '../internal/application/event-handlers/telemetry-threshold-breached.handler';
+import { TelemetryThresholdClearedHandler } from '../internal/application/event-handlers/telemetry-threshold-cleared.handler';
 
 import { IDeviceRepository } from '../internal/domain/repositories/device.repo.interface';
 import { ITelemetryEventRepository } from '../internal/domain/repositories/telemetry-event.repo.interface';
@@ -54,6 +55,7 @@ import { IDevicesPrismaClient } from '../internal/infrastructure/database/device
         // note: registered as a plain provider purely so Nest instantiates it — EventHandlerBase's
         // onModuleInit is what subscribes it to the bus. Nothing ever injects it by hand.
         TelemetryThresholdBreachedHandler,
+        TelemetryThresholdClearedHandler,
         DeviceMapper,
         TelemetryEventMapper,
         AlertMapper,

@@ -6,6 +6,7 @@ import { IEventBus } from 'src/shared/domain/contracts/event-bus.interface';
 import { IDeviceRepository } from '../../../domain/repositories/device.repo.interface';
 import { ITelemetryEventRepository } from '../../../domain/repositories/telemetry-event.repo.interface';
 import { TelemetryReading } from '../../../domain/entities/telemetry-reading.aggregate';
+import { TelemetryThresholdBreachedEvent } from '../../../domain/events/telemetry-threshold-breached.event';
 import { DeviceId } from '../../../domain/value-objects/device-id.vo';
 import { DeviceNotFoundError } from '../../errors/device-not-found.error';
 import { IDeviceStateCache } from '../../contracts/device-state-cache.interface';
@@ -69,20 +70,28 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
 
         await this.refreshLatestState(reading);
 
-        const breaches = reading.getDomainEventsToPublish();
-        await this.eventBus.publishAll(breaches);
+        // note: the reading now emits a verdict per threshold, breached or cleared, so the event
+        // count is no longer the alert count — every reading publishes one event per rule. The
+        // response still means "how many alerts did THIS reading raise", so breaches are counted
+        // explicitly rather than inferred from the size of the batch.
+        const verdicts = reading.getDomainEventsToPublish();
+        await this.eventBus.publishAll(verdicts);
+
+        const alertsRaised = verdicts.filter(
+            (verdict) => verdict instanceof TelemetryThresholdBreachedEvent,
+        ).length;
 
         this.logger.info('Telemetry recorded', {
             id: reading.getId().value,
             deviceId: reading.getDeviceId().value,
-            alertsRaised: breaches.length,
+            alertsRaised,
         });
 
         return new RecordTelemetryResponse(
             reading.getId().value,
             reading.getDeviceId().value,
             reading.getRecordedAt().value,
-            breaches.length,
+            alertsRaised,
         );
     }
 
