@@ -10,6 +10,7 @@ import {printBanner} from './banner-printer';
 
 import { NestLogger } from './shared/infrastructure/logger/nest-logger';
 import { GlobalErrorFilter } from './shared/infrastructure/filters/global-error.filter';
+import { LocalizationService } from './shared/infrastructure/i18n/localization.service';
 // note: Prisma exception filters are disabled until the Prisma schema/client is generated
 // (deferred). Re-enable these two imports and their registrations below after `prisma generate`.
 // import { PrismaKnownExceptionFilter } from './shared/infrastructure/filters/prisma-known-exception.filter';
@@ -48,9 +49,12 @@ async function bootstrap() {
     app.enableShutdownHooks();
 
     const logger = new NestLogger();
+    // note: pull the singleton the modules registered their catalogs into (their onModuleInit has
+    // already run by now), so the filter and the modules share one populated LocalizationService.
+    const localization = app.get(LocalizationService);
 
     app.useGlobalFilters(
-        new GlobalErrorFilter(logger),
+        new GlobalErrorFilter(logger, localization),
         // note: re-enable once the Prisma client is generated (see disabled imports above)
         // new PrismaUnknownExceptionFilter(logger),
         // new PrismaKnownExceptionFilter(logger),

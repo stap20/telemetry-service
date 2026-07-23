@@ -16,10 +16,14 @@ import { ConflictError } from '../../application/errors/conflict.error';
 import { UnauthorizedError } from '../../application/errors/unauthorized.error';
 import { NotFoundError } from '../../application/errors/notfound.error';
 import { ILogger } from '../../domain/contracts/logger.interface';
+import { LocalizationService } from '../i18n/localization.service';
 
 @Catch()
 export class GlobalErrorFilter implements ExceptionFilter {
-    constructor(private readonly logger: ILogger) {}
+    constructor(
+        private readonly logger: ILogger,
+        private readonly localization: LocalizationService,
+    ) {}
 
     catch(error: Error, host: ArgumentsHost) {
         const ctx = host.switchToHttp();
@@ -63,13 +67,31 @@ export class GlobalErrorFilter implements ExceptionFilter {
             }
         }
 
-        message = error.message;
+        // note: translation happens HERE, at the HTTP boundary — the only place that sees the
+        // request's Accept-Language. Domain/application errors only carry a translationKey + params;
+        // errors without a key (e.g. framework HttpExceptions) fall back to their raw message.
+        const locale = this.localization.resolveLocale(
+            request.headers['accept-language'],
+        );
+        const localizable = error as {
+            translationKey?: string;
+            translationParams?: Record<string, string | number>;
+        };
+        message = localizable.translationKey
+            ? this.localization.translate(
+                  localizable.translationKey,
+                  locale,
+                  localizable.translationParams,
+                  error.message,
+              )
+            : error.message;
         errorCode = status.toString();
 
         response.status(status).json({
             statusCode: status,
             message,
             errorCode,
+            locale,
             timestamp: new Date().toISOString(),
             path: request.url,
             method: request.method,
