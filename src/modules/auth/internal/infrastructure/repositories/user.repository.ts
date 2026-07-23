@@ -1,11 +1,11 @@
 // cypod-telemetry
 // src/modules/auth/internal/infrastructure/repositories/user.repository.ts
 import { Injectable, Inject } from '@nestjs/common';
-import { randomUUID } from 'crypto';
 import { IUserRepository } from '../../domain/repositories/user.repo.interface';
 import { User } from '../../domain/entities/user.aggregate';
 import { Email } from '../../domain/value-objects/email.vo';
 import { UserId } from '../../domain/value-objects/user-id.vo';
+import { IIdGenerator } from 'src/shared/domain/contracts/id-generator.interface';
 import { IAuthPrismaClient } from '../database/auth.prisma.client.interface';
 import { UserMapper } from '../database/mappers/user.mapper';
 
@@ -13,13 +13,15 @@ import { UserMapper } from '../database/mappers/user.mapper';
 export class UserRepository implements IUserRepository {
     constructor(
         @Inject(IAuthPrismaClient) private readonly prisma: IAuthPrismaClient,
+        @Inject(IIdGenerator) private readonly idGenerator: IIdGenerator,
         private readonly userMapper: UserMapper,
     ) {}
 
-    // note: the repo owns the id strategy (uuid here) — swapping to cuid/db sequence never touches
-    // the domain or application layer.
+    // note: the repo exposes generateId() (the handler asks it for an id, per the skill) but the id
+    // strategy itself lives in the shared UuidGenerator behind IIdGenerator — one source of truth for
+    // the whole app, and no module touches `crypto` directly. Swapping strategy is a one-file change.
     generateId(): string {
-        return randomUUID();
+        return this.idGenerator.generate();
     }
 
     async getById(id: UserId): Promise<User | null> {
