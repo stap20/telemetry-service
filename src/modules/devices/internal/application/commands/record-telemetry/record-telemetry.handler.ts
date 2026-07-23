@@ -4,7 +4,10 @@ import { Injectable, Inject } from '@nestjs/common';
 import { CommandHandlerBase } from 'src/shared/application/command.handler.base';
 import { IEventBus } from 'src/shared/domain/contracts/event-bus.interface';
 import { IDeviceRepository } from '../../../domain/repositories/device.repo.interface';
-import { ITelemetryEventRepository } from '../../../domain/repositories/telemetry-event.repo.interface';
+import {
+    ITelemetryEventRepository,
+    TelemetryWriteOutcome,
+} from '../../../domain/repositories/telemetry-event.repo.interface';
 import { TelemetryReading } from '../../../domain/entities/telemetry-reading.aggregate';
 import { TelemetryThresholdBreachedEvent } from '../../../domain/events/telemetry-threshold-breached.event';
 import { DeviceId } from '../../../domain/value-objects/device-id.vo';
@@ -66,7 +69,27 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
             this.thresholdsProvider.current(),
         );
 
-        await this.telemetryEventRepository.save(reading);
+        const write = await this.telemetryEventRepository.save(reading);
+
+        // note: a duplicate stops here deliberately. Re-publishing the verdicts would raise a second
+        // alert for a breach already recorded, and re-touching the cache would extend the TTL of a
+        // state on the strength of a reading that told us nothing new. Idempotent has to mean the
+        // whole side-effect chain runs once, not just that the row is written once.
+        if (write.outcome === TelemetryWriteOutcome.DUPLICATE) {
+            this.logger.info('Duplicate telemetry ignored', {
+                id: write.id,
+                deviceId: reading.getDeviceId().value,
+                recordedAt: reading.getRecordedAt().value.toISOString(),
+            });
+
+            return new RecordTelemetryResponse(
+                write.id,
+                reading.getDeviceId().value,
+                reading.getRecordedAt().value,
+                0,
+                true,
+            );
+        }
 
         await this.refreshLatestState(reading);
 
@@ -88,10 +111,11 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
         });
 
         return new RecordTelemetryResponse(
-            reading.getId().value,
+            write.id,
             reading.getDeviceId().value,
             reading.getRecordedAt().value,
             alertsRaised,
+            false,
         );
     }
 

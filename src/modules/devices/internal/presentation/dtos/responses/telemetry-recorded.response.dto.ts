@@ -30,15 +30,28 @@ export class TelemetryRecordedResponseDto {
     })
     alertsRaised: number;
 
+    // note: true when this exact reading was already stored. Reported as a field on a 200 rather
+    // than as a 409, because from the device's point of view nothing went wrong — it asked us to
+    // record a reading and that reading is recorded. An error status would push a retrying device
+    // into treating a success as a failure and retrying harder.
+    @ApiProperty({
+        description:
+            'Whether this reading was already stored and was therefore ignored',
+        example: false,
+    })
+    duplicate: boolean;
+
     constructor(
         id: string,
         deviceId: string,
         recordedAt: Date,
         alertsRaised: number,
+        duplicate: boolean,
     ) {
         this.id = id;
         this.deviceId = deviceId;
         this.recordedAt = recordedAt;
         this.alertsRaised = alertsRaised;
+        this.duplicate = duplicate;
     }
 }

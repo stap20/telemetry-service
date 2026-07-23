@@ -44,6 +44,12 @@ model TelemetryEvent {
   recordedAt  DateTime
   createdAt   DateTime @default(now())
 
+  // note: (deviceId, recordedAt) is the reading's NATURAL key — a device has exactly one state at
+  // any one instant, so two rows sharing both are the same physical reading told twice, not two
+  // readings. Enforcing that in the database rather than in the handler is what makes ingestion
+  // idempotent under concurrency: a retry after a timeout and the two identical rows in the sample
+  // file are both absorbed by the same constraint, with no read-then-write race to lose.
+  @@unique([deviceId, recordedAt])
   @@index([deviceId, recordedAt])
   @@map("telemetry_events")
 }

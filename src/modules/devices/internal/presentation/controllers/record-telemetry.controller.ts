@@ -76,6 +76,7 @@ export class RecordTelemetryController {
             result.deviceId,
             result.recordedAt,
             result.alertsRaised,
+            result.duplicate,
         );
     }
 }
