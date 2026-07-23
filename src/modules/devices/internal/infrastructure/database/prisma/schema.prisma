@@ -1,0 +1,25 @@
+// cypod-telemetry
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// note: `id` is client-supplied (the physical device's own stable identity) — no @default, because
+// incoming telemetry references the device by the same id the client registers here. `ownerId` is
+// the authenticated user's id, stored as a plain string with NO foreign key to the auth database:
+// each module owns its own DB (modular monolith), so cross-module identity is carried by value, not
+// by a join. Indexed because `GET /devices` always filters by owner.
+model Device {
+  id        String   @id
+  name      String
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@map("devices")
+}
