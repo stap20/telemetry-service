@@ -11,10 +11,6 @@ import {printBanner} from './banner-printer';
 import { NestLogger } from './shared/infrastructure/logger/nest-logger';
 import { GlobalErrorFilter } from './shared/infrastructure/filters/global-error.filter';
 import { LocalizationService } from './shared/infrastructure/i18n/localization.service';
-// note: Prisma exception filters are disabled until the Prisma schema/client is generated
-// (deferred). Re-enable these two imports and their registrations below after `prisma generate`.
-// import { PrismaKnownExceptionFilter } from './shared/infrastructure/filters/prisma-known-exception.filter';
-// import { PrismaUnknownExceptionFilter } from './shared/infrastructure/filters/prisma-unknown-exception.filter';
 
 async function bootstrap() {
 
@@ -53,12 +49,11 @@ async function bootstrap() {
     // already run by now), so the filter and the modules share one populated LocalizationService.
     const localization = app.get(LocalizationService);
 
-    app.useGlobalFilters(
-        new GlobalErrorFilter(logger, localization),
-        // note: re-enable once the Prisma client is generated (see disabled imports above)
-        // new PrismaUnknownExceptionFilter(logger),
-        // new PrismaKnownExceptionFilter(logger),
-    );
+    // note: a single catch-all filter owns the whole error envelope. Prisma errors are detected and
+    // mapped inside it by name/code (see GlobalErrorFilter.mapPrismaError) rather than in separate
+    // @Catch(PrismaClient*) filters — each module has an isolated generated client, so instanceof
+    // against a shared class silently fails across module boundaries.
+    app.useGlobalFilters(new GlobalErrorFilter(logger, localization));
 
     const config = new DocumentBuilder()
         .setTitle('Cypod Telemetry Service API')
