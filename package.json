@@ -22,7 +22,8 @@
     "auth:db:generate": "prisma generate --config=./src/modules/auth/internal/infrastructure/database/prisma/prisma.config.ts",
     "auth:db:migrate": "prisma migrate dev --config=./src/modules/auth/internal/infrastructure/database/prisma/prisma.config.ts",
     "auth:db:deploy": "prisma migrate deploy --config=./src/modules/auth/internal/infrastructure/database/prisma/prisma.config.ts",
-    "auth:db:studio": "prisma studio --config=./src/modules/auth/internal/infrastructure/database/prisma/prisma.config.ts"
+    "auth:db:studio": "prisma studio --config=./src/modules/auth/internal/infrastructure/database/prisma/prisma.config.ts",
+    "postinstall": "npm run auth:db:generate"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
