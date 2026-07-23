@@ -9,9 +9,11 @@ export class RecordTelemetryCommand implements ICommand {
         public readonly ownerId: string,
         public readonly battery: number,
         public readonly temperature: number,
-        public readonly lat: number,
-        public readonly lng: number,
-        public readonly status: string,
+        // note: null, not undefined — "the device reported no fix" is a fact worth carrying, and a
+        // command that can express it in only one way cannot drift between the two spellings.
+        public readonly lat: number | null,
+        public readonly lng: number | null,
+        public readonly status: string | null,
         public readonly timestamp: Date,
     ) {}
 }

@@ -6,8 +6,8 @@ export class TelemetryReadingResponse {
         public readonly deviceId: string,
         public readonly battery: number,
         public readonly temperature: number,
-        public readonly lat: number,
-        public readonly lng: number,
+        public readonly lat: number | null,
+        public readonly lng: number | null,
         public readonly status: string,
         public readonly recordedAt: Date,
     ) {}

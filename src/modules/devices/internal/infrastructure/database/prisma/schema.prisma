@@ -31,14 +31,15 @@ model Device {
 // battery/temperature/lat/lng are all floats — battery was Int until the sample data showed the
 // fleet reporting tenths of a percent, and an Int column would have rounded 27.7 to 28 on the way
 // in with no way to tell later that it had happened. Indexed by (deviceId, recordedAt) because
-// every read is "the latest readings for one device".
+// every read is "the latest readings for one device". lat/lng are nullable so a reading taken
+// without a GPS fix is still a reading — storing 0,0 instead would put the device in the Atlantic.
 model TelemetryEvent {
   id          String   @id
   deviceId    String
   battery     Float
   temperature Float
-  lat         Float
-  lng         Float
+  lat         Float?
+  lng         Float?
   status      String
   recordedAt  DateTime
   createdAt   DateTime @default(now())

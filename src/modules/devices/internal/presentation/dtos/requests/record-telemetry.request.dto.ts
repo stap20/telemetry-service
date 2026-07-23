@@ -1,6 +1,6 @@
 // cypod-telemetry
 // src/modules/devices/internal/presentation/dtos/requests/record-telemetry.request.dto.ts
-import { IsNumber, IsEnum, IsDate } from 'class-validator';
+import { IsNumber, IsEnum, IsDate, IsOptional } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { CoerceNumericString } from 'src/shared/infrastructure/decorators/coerce-numeric-string.decorator';
@@ -29,21 +29,43 @@ export class RecordTelemetryRequestDto {
     @IsNumber()
     temperature: number;
 
-    @ApiProperty({ description: 'Latitude of the reading', example: 30.0444 })
+    // note: optional, and null is an accepted value rather than a rejected one — a device with no
+    // GPS fix reports `lat: null, lng: null`, which is a true statement about where it is. The
+    // aggregate still refuses one without the other; that rule is a domain rule, not a shape rule.
+    @ApiProperty({
+        description: 'Latitude of the reading, or null when the device has no GPS fix',
+        example: 30.0444,
+        required: false,
+        nullable: true,
+    })
+    @IsOptional()
+    @CoerceNumericString()
     @IsNumber()
-    lat: number;
-
-    @ApiProperty({ description: 'Longitude of the reading', example: 31.2357 })
-    @IsNumber()
-    lng: number;
+    lat?: number | null;
 
     @ApiProperty({
-        description: 'Reported device status',
+        description: 'Longitude of the reading, or null when the device has no GPS fix',
+        example: 31.2357,
+        required: false,
+        nullable: true,
+    })
+    @IsOptional()
+    @CoerceNumericString()
+    @IsNumber()
+    lng?: number | null;
+
+    // note: optional so a firmware build that omits the field still gets its battery and temperature
+    // stored — those are what the alert rules run on. The aggregate records the absence as UNKNOWN
+    // rather than assuming OK, so "the device did not say" never masquerades as "the device is fine".
+    @ApiProperty({
+        description: 'Reported device status; recorded as UNKNOWN when omitted',
         enum: DeviceStatusValue,
         example: DeviceStatusValue.OK,
+        required: false,
     })
+    @IsOptional()
     @IsEnum(DeviceStatusValue)
-    status: DeviceStatusValue;
+    status?: DeviceStatusValue;
 
     @ApiProperty({
         description: 'When the reading was taken on the device (ISO 8601)',

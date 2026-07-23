@@ -64,9 +64,9 @@ export class RecordTelemetryController {
                 user.userId,
                 dto.battery,
                 dto.temperature,
-                dto.lat,
-                dto.lng,
-                dto.status,
+                dto.lat ?? null,
+                dto.lng ?? null,
+                dto.status ?? null,
                 dto.timestamp,
             ),
         );

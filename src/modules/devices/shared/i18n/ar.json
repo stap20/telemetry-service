@@ -14,6 +14,7 @@
   "devices.temperature_out_of_range": "يجب أن تتراوح درجة الحرارة بين {min} و {max} درجة مئوية",
   "devices.latitude_invalid": "يجب أن يتراوح خط العرض بين {min} و {max}",
   "devices.longitude_invalid": "يجب أن يتراوح خط الطول بين {min} و {max}",
+  "devices.coordinates_partial": "يجب توفير خط العرض وخط الطول معًا",
   "devices.device_status_empty": "لا يمكن أن تكون حالة الجهاز فارغة",
   "devices.device_status_invalid": "يجب أن تكون حالة الجهاز إحدى القيم التالية: {allowed}",
   "devices.telemetry_timestamp_invalid": "يجب أن يكون توقيت القراءة تاريخًا صالحًا",

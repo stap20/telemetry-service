@@ -14,6 +14,7 @@
   "devices.temperature_out_of_range": "Temperature must be between {min} and {max} degrees Celsius",
   "devices.latitude_invalid": "Latitude must be between {min} and {max}",
   "devices.longitude_invalid": "Longitude must be between {min} and {max}",
+  "devices.coordinates_partial": "Latitude and longitude must be provided together",
   "devices.device_status_empty": "Device status cannot be empty",
   "devices.device_status_invalid": "Device status must be one of: {allowed}",
   "devices.telemetry_timestamp_invalid": "Telemetry timestamp must be a valid date",

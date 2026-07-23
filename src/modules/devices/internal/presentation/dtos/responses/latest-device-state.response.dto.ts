@@ -16,10 +16,10 @@ export class LatestDeviceStateResponseDto {
     temperature: number;
 
     @ApiProperty({ description: 'Latitude of the last known position', example: 30.0444 })
-    lat: number;
+    lat: number | null;
 
     @ApiProperty({ description: 'Longitude of the last known position', example: 31.2357 })
-    lng: number;
+    lng: number | null;
 
     @ApiProperty({
         description: 'Status the device reported',
@@ -37,8 +37,8 @@ export class LatestDeviceStateResponseDto {
         deviceId: string,
         battery: number,
         temperature: number,
-        lat: number,
-        lng: number,
+        lat: number | null,
+        lng: number | null,
         status: string,
         recordedAt: Date,
     ) {
