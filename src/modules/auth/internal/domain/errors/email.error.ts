@@ -1,7 +1,7 @@
 // cypod-telemetry
-import { DomainError } from 'src/shared/domain/errors/domain.error';
+import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
-export class InvalidEmailError extends DomainError {
+export class InvalidEmailError extends ValidationDomainError {
   constructor(email: string) {
     super(`Invalid email format: ${email}`, 'auth.invalid_email', { email });
   }
