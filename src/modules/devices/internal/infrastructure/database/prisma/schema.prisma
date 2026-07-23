@@ -28,19 +28,28 @@ model Device {
 // reading has no natural external identity, unlike Device.id which the physical device carries).
 // `deviceId` is stored by value with NO foreign key: same modular-monolith rule as Device.ownerId —
 // telemetry could later move to its own DB, so cross-concept identity is a plain string, not a join.
-// battery is a whole percent (0-100); temperature/lat/lng are floats. Indexed by (deviceId,
-// recordedAt) because every read is "the latest readings for one device".
+// battery/temperature/lat/lng are all floats — battery was Int until the sample data showed the
+// fleet reporting tenths of a percent, and an Int column would have rounded 27.7 to 28 on the way
+// in with no way to tell later that it had happened. Indexed by (deviceId, recordedAt) because
+// every read is "the latest readings for one device". lat/lng are nullable so a reading taken
+// without a GPS fix is still a reading — storing 0,0 instead would put the device in the Atlantic.
 model TelemetryEvent {
   id          String   @id
   deviceId    String
-  battery     Int
+  battery     Float
   temperature Float
-  lat         Float
-  lng         Float
+  lat         Float?
+  lng         Float?
   status      String
   recordedAt  DateTime
   createdAt   DateTime @default(now())
 
+  // note: (deviceId, recordedAt) is the reading's NATURAL key — a device has exactly one state at
+  // any one instant, so two rows sharing both are the same physical reading told twice, not two
+  // readings. Enforcing that in the database rather than in the handler is what makes ingestion
+  // idempotent under concurrency: a retry after a timeout and the two identical rows in the sample
+  // file are both absorbed by the same constraint, with no read-then-write race to lose.
+  @@unique([deviceId, recordedAt])
   @@index([deviceId, recordedAt])
   @@map("telemetry_events")
 }

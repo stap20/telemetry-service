@@ -29,6 +29,7 @@ import { IGetDeviceHistoryHandler } from '../internal/application/queries/get-de
 import { IListActiveAlertsHandler } from '../internal/application/queries/list-active-alerts/list-active-alerts.handler.interface';
 import { IDeviceStateCache } from '../internal/application/contracts/device-state-cache.interface';
 import { ITelemetryThresholdsProvider } from '../internal/application/contracts/telemetry-thresholds.provider.interface';
+import { ITelemetryRateLimiter } from '../internal/application/contracts/telemetry-rate-limiter.interface';
 
 import { DeviceMapper } from '../internal/infrastructure/database/mappers/device.mapper';
 import { TelemetryEventMapper } from '../internal/infrastructure/database/mappers/telemetry-event.mapper';
@@ -45,6 +46,7 @@ import { GetDeviceHistoryHandler } from '../internal/infrastructure/query-handle
 import { ListActiveAlertsHandler } from '../internal/infrastructure/query-handlers/list-active-alerts.handler';
 import { DeviceStateCache } from '../internal/infrastructure/services/device-state.cache';
 import { TelemetryThresholdsProvider } from '../internal/infrastructure/services/telemetry-thresholds.provider';
+import { TelemetryRateLimiter } from '../internal/infrastructure/services/telemetry-rate-limiter';
 import { DevicesPrismaConnection } from '../internal/infrastructure/database/devices-prisma.connection';
 import { IDevicesPrismaClient } from '../internal/infrastructure/database/devices.prisma.client.interface';
 
@@ -84,6 +86,7 @@ import { IDevicesPrismaClient } from '../internal/infrastructure/database/device
             provide: ITelemetryThresholdsProvider,
             useClass: TelemetryThresholdsProvider,
         },
+        { provide: ITelemetryRateLimiter, useClass: TelemetryRateLimiter },
         { provide: IListDevicesHandler, useClass: ListDevicesHandler },
         {
             provide: IGetLatestDeviceStateHandler,

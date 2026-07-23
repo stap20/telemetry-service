@@ -27,8 +27,8 @@ export class TelemetryEventMapper {
             deviceId: reading.getDeviceId().value,
             battery: reading.getBattery().value,
             temperature: reading.getTemperature().value,
-            lat: reading.getLocation().latitude,
-            lng: reading.getLocation().longitude,
+            lat: reading.getLocation()?.latitude ?? null,
+            lng: reading.getLocation()?.longitude ?? null,
             status: reading.getStatus().value,
             recordedAt: reading.getRecordedAt().value,
         };

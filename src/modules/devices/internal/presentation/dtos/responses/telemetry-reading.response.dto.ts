@@ -16,10 +16,10 @@ export class TelemetryReadingResponseDto {
     temperature: number;
 
     @ApiProperty({ description: 'Latitude at the time of the reading', example: 30.0444 })
-    lat: number;
+    lat: number | null;
 
     @ApiProperty({ description: 'Longitude at the time of the reading', example: 31.2357 })
-    lng: number;
+    lng: number | null;
 
     @ApiProperty({ description: 'Status the device reported', example: 'ONLINE' })
     status: string;
@@ -35,8 +35,8 @@ export class TelemetryReadingResponseDto {
         deviceId: string,
         battery: number,
         temperature: number,
-        lat: number,
-        lng: number,
+        lat: number | null,
+        lng: number | null,
         status: string,
         recordedAt: Date,
     ) {

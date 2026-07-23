@@ -5,8 +5,8 @@ export class TelemetryEventEntity {
     deviceId: string;
     battery: number;
     temperature: number;
-    lat: number;
-    lng: number;
+    lat: number | null;
+    lng: number | null;
     status: string;
     recordedAt: Date;
     createdAt: Date;

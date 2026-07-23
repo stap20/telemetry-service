@@ -4,13 +4,18 @@ import { Injectable, Inject } from '@nestjs/common';
 import { CommandHandlerBase } from 'src/shared/application/command.handler.base';
 import { IEventBus } from 'src/shared/domain/contracts/event-bus.interface';
 import { IDeviceRepository } from '../../../domain/repositories/device.repo.interface';
-import { ITelemetryEventRepository } from '../../../domain/repositories/telemetry-event.repo.interface';
+import {
+    ITelemetryEventRepository,
+    TelemetryWriteOutcome,
+} from '../../../domain/repositories/telemetry-event.repo.interface';
 import { TelemetryReading } from '../../../domain/entities/telemetry-reading.aggregate';
 import { TelemetryThresholdBreachedEvent } from '../../../domain/events/telemetry-threshold-breached.event';
 import { DeviceId } from '../../../domain/value-objects/device-id.vo';
 import { DeviceNotFoundError } from '../../errors/device-not-found.error';
 import { IDeviceStateCache } from '../../contracts/device-state-cache.interface';
 import { ITelemetryThresholdsProvider } from '../../contracts/telemetry-thresholds.provider.interface';
+import { ITelemetryRateLimiter } from '../../contracts/telemetry-rate-limiter.interface';
+import { TelemetryRateLimitExceededError } from '../../errors/telemetry-rate-limit-exceeded.error';
 import { RecordTelemetryCommand } from './record-telemetry.command';
 import { RecordTelemetryResponse } from './record-telemetry.response';
 
@@ -28,6 +33,8 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
         private readonly deviceStateCache: IDeviceStateCache,
         @Inject(ITelemetryThresholdsProvider)
         private readonly thresholdsProvider: ITelemetryThresholdsProvider,
+        @Inject(ITelemetryRateLimiter)
+        private readonly rateLimiter: ITelemetryRateLimiter,
         @Inject(IEventBus) private readonly eventBus: IEventBus,
     ) {
         super();
@@ -50,6 +57,12 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
             throw new DeviceNotFoundError(command.deviceId);
         }
 
+        // note: throttled AFTER ownership is proven, never before. The budget belongs to the device,
+        // so spending it on behalf of a caller who does not own the device would turn the rate limit
+        // into a way to silence someone else's hardware — a denial of service delivered through the
+        // very feature meant to prevent one.
+        await this.enforceRateLimit(command);
+
         // note: the aggregate validates every field and evaluates the thresholds as one step, so
         // nothing reaches the database until the whole payload is known to be good.
         const reading = TelemetryReading.record(
@@ -66,7 +79,27 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
             this.thresholdsProvider.current(),
         );
 
-        await this.telemetryEventRepository.save(reading);
+        const write = await this.telemetryEventRepository.save(reading);
+
+        // note: a duplicate stops here deliberately. Re-publishing the verdicts would raise a second
+        // alert for a breach already recorded, and re-touching the cache would extend the TTL of a
+        // state on the strength of a reading that told us nothing new. Idempotent has to mean the
+        // whole side-effect chain runs once, not just that the row is written once.
+        if (write.outcome === TelemetryWriteOutcome.DUPLICATE) {
+            this.logger.info('Duplicate telemetry ignored', {
+                id: write.id,
+                deviceId: reading.getDeviceId().value,
+                recordedAt: reading.getRecordedAt().value.toISOString(),
+            });
+
+            return new RecordTelemetryResponse(
+                write.id,
+                reading.getDeviceId().value,
+                reading.getRecordedAt().value,
+                0,
+                true,
+            );
+        }
 
         await this.refreshLatestState(reading);
 
@@ -88,11 +121,29 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
         });
 
         return new RecordTelemetryResponse(
-            reading.getId().value,
+            write.id,
             reading.getDeviceId().value,
             reading.getRecordedAt().value,
             alertsRaised,
+            false,
         );
+    }
+
+    // note: the budget is spent before we know whether the reading is a duplicate, so replaying the
+    // same batch over and over does eventually get throttled. That is intended: one replay is a
+    // device recovering, ten replays of the same minute is a device malfunctioning, and the limiter
+    // cannot tell the difference from any single request — only from how many of them there are.
+    private async enforceRateLimit(
+        command: RecordTelemetryCommand,
+    ): Promise<void> {
+        const decision = await this.rateLimiter.consume(
+            command.deviceId,
+            command.timestamp,
+        );
+
+        if (!decision.allowed) {
+            throw new TelemetryRateLimitExceededError(decision.limit ?? 0);
+        }
     }
 
     // note: the cache is a derived read optimisation, not the source of truth. The reading is
@@ -116,8 +167,8 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
                 deviceId: reading.getDeviceId().value,
                 battery: reading.getBattery().value,
                 temperature: reading.getTemperature().value,
-                lat: reading.getLocation().latitude,
-                lng: reading.getLocation().longitude,
+                lat: reading.getLocation()?.latitude ?? null,
+                lng: reading.getLocation()?.longitude ?? null,
                 status: reading.getStatus().value,
                 recordedAt: reading.getRecordedAt().value.toISOString(),
             });
