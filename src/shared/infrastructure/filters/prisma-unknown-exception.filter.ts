@@ -5,14 +5,14 @@ import {
     HttpStatus,
     ExceptionFilter,
 } from '@nestjs/common';
-import { PrismaClientUnknownRequestError } from '@prisma/client-runtime-utils';
+import { Prisma } from '@prisma/client';
 import { ILogger } from '../../domain/contracts/logger.interface';
 
-@Catch(PrismaClientUnknownRequestError)
+@Catch(Prisma.PrismaClientUnknownRequestError)
 export class PrismaUnknownExceptionFilter implements ExceptionFilter {
     constructor(private readonly logger: ILogger) {}
 
-    catch(exception: PrismaClientUnknownRequestError, host: ArgumentsHost) {
+    catch(exception: Prisma.PrismaClientUnknownRequestError, host: ArgumentsHost) {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse();
         const request = ctx.getRequest();
