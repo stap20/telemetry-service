@@ -11,6 +11,7 @@ import { TelemetryTimestamp } from '../value-objects/telemetry/telemetry-timesta
 import { TelemetryThresholds } from '../value-objects/telemetry/telemetry-thresholds.vo';
 import { AlertTypeValue } from '../value-objects/alert/alert-type.vo';
 import { TelemetryThresholdBreachedEvent } from '../events/telemetry-threshold-breached.event';
+import { TelemetryThresholdClearedEvent } from '../events/telemetry-threshold-cleared.event';
 
 export interface RecordTelemetryParams {
     id: string;
@@ -94,30 +95,47 @@ export class TelemetryReading extends AggregateRoot<TelemetryEventId> {
 
     // note: both thresholds are checked independently — one reading can breach battery AND
     // temperature at once, and each raises its own alert rather than the first one masking the other.
+    // Every reading reaches a verdict on every rule: a healthy value is not silence, it is a
+    // positive "this rule is satisfied" that closes any alert still open against it. Without the
+    // cleared branch an alert could only ever be raised, so "active alerts" would grow forever and
+    // stop meaning anything.
     private evaluateAgainst(thresholds: TelemetryThresholds): void {
-        if (this.battery.isBelow(thresholds.minBattery)) {
-            this.addDomainEvent(
-                new TelemetryThresholdBreachedEvent(
-                    this.deviceId.value,
-                    AlertTypeValue.LOW_BATTERY,
-                    this.battery.value,
-                    thresholds.minBattery,
-                    this.recordedAt.value,
-                ),
-            );
-        }
+        this.judge(
+            this.battery.isBelow(thresholds.minBattery),
+            AlertTypeValue.LOW_BATTERY,
+            this.battery.value,
+            thresholds.minBattery,
+        );
 
-        if (this.temperature.isAbove(thresholds.maxTemperature)) {
-            this.addDomainEvent(
-                new TelemetryThresholdBreachedEvent(
-                    this.deviceId.value,
-                    AlertTypeValue.HIGH_TEMPERATURE,
-                    this.temperature.value,
-                    thresholds.maxTemperature,
-                    this.recordedAt.value,
-                ),
-            );
-        }
+        this.judge(
+            this.temperature.isAbove(thresholds.maxTemperature),
+            AlertTypeValue.HIGH_TEMPERATURE,
+            this.temperature.value,
+            thresholds.maxTemperature,
+        );
+    }
+
+    private judge(
+        breached: boolean,
+        type: AlertTypeValue,
+        value: number,
+        threshold: number,
+    ): void {
+        this.addDomainEvent(
+            breached
+                ? new TelemetryThresholdBreachedEvent(
+                      this.deviceId.value,
+                      type,
+                      value,
+                      threshold,
+                      this.recordedAt.value,
+                  )
+                : new TelemetryThresholdClearedEvent(
+                      this.deviceId.value,
+                      type,
+                      this.recordedAt.value,
+                  ),
+        );
     }
 
     public getDeviceId(): DeviceId {

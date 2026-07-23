@@ -1,4 +1,5 @@
 // cypod-telemetry
+import { DomainError } from 'src/shared/domain/errors/domain.error';
 import { ValidationDomainError } from 'src/shared/domain/errors/validation.domain.error';
 
 export class EmptyAlertIdError extends ValidationDomainError {
@@ -23,5 +24,16 @@ export class InvalidAlertTypeError extends ValidationDomainError {
             'devices.alert_type_invalid',
             { allowed },
         );
+    }
+}
+
+// note: NOT a ValidationDomainError — no client sends this. Alerts resolve themselves in reaction to
+// a later reading, so hitting this means the same clearing reading was processed twice. It is the
+// aggregate refusing to overwrite the recorded recovery time with a second, later one, which would
+// quietly falsify how long the condition actually lasted. No translationKey: the resolve path is
+// internal and this never reaches an HTTP response.
+export class AlertAlreadyResolvedError extends DomainError {
+    constructor(id: string) {
+        super(`Alert ${id} is already resolved`);
     }
 }

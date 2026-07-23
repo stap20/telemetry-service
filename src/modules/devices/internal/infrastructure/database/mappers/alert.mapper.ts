@@ -15,6 +15,7 @@ export class AlertMapper {
             value: entity.value,
             threshold: entity.threshold,
             triggeredAt: entity.triggeredAt,
+            resolvedAt: entity.resolvedAt,
         });
     }
 
@@ -27,6 +28,7 @@ export class AlertMapper {
             value: alert.getValue(),
             threshold: alert.getThreshold(),
             triggeredAt: alert.getTriggeredAt(),
+            resolvedAt: alert.getResolvedAt(),
         };
     }
 }

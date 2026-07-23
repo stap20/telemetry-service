@@ -8,6 +8,7 @@ export class AlertEntity {
     value: number;
     threshold: number;
     triggeredAt: Date;
+    resolvedAt: Date | null;
     createdAt: Date;
 
     constructor(data: Partial<AlertEntity>) {

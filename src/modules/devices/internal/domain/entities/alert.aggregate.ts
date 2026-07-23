@@ -4,6 +4,7 @@ import { AggregateRoot } from 'src/shared/domain/aggregate-root';
 import { DeviceId } from '../value-objects/device-id.vo';
 import { AlertId } from '../value-objects/alert/alert-id.vo';
 import { AlertType, AlertTypeValue } from '../value-objects/alert/alert-type.vo';
+import { AlertAlreadyResolvedError } from '../errors/alert/alert.error';
 
 export interface RaiseAlertParams {
     id: string;
@@ -16,6 +17,7 @@ export interface RaiseAlertParams {
 
 export interface AlertPersistenceParams extends RaiseAlertParams {
     message: string;
+    resolvedAt: Date | null;
 }
 
 export class Alert extends AggregateRoot<AlertId> {
@@ -25,6 +27,7 @@ export class Alert extends AggregateRoot<AlertId> {
     private value: number;
     private threshold: number;
     private triggeredAt: Date;
+    private resolvedAt: Date | null;
 
     private constructor(
         id: AlertId,
@@ -34,6 +37,7 @@ export class Alert extends AggregateRoot<AlertId> {
         value: number,
         threshold: number,
         triggeredAt: Date,
+        resolvedAt: Date | null,
     ) {
         super(id);
         this.deviceId = deviceId;
@@ -42,6 +46,7 @@ export class Alert extends AggregateRoot<AlertId> {
         this.value = value;
         this.threshold = threshold;
         this.triggeredAt = triggeredAt;
+        this.resolvedAt = resolvedAt;
     }
 
     // note: `raise` derives its own message rather than accepting one — the alert owns how it
@@ -59,6 +64,7 @@ export class Alert extends AggregateRoot<AlertId> {
             params.value,
             params.threshold,
             params.triggeredAt,
+            null,
         );
     }
 
@@ -71,7 +77,26 @@ export class Alert extends AggregateRoot<AlertId> {
             params.value,
             params.threshold,
             params.triggeredAt,
+            params.resolvedAt,
         );
+    }
+
+    // note: an alert is closed by the world getting better, not by a person acknowledging it — the
+    // next reading that no longer breaches this threshold is what resolves it. That is why there is
+    // no `acknowledge()` and no dismiss endpoint: a human dismissing a still-breaching condition
+    // would hide a live problem, and a condition that has genuinely recovered should not wait on
+    // someone to notice. `clearedAt` is the reading's own timestamp, not now(), so the recorded
+    // duration reflects when the device actually recovered rather than when we got around to it.
+    public resolve(clearedAt: Date): void {
+        if (this.resolvedAt !== null) {
+            throw new AlertAlreadyResolvedError(this.id.value);
+        }
+
+        this.resolvedAt = clearedAt;
+    }
+
+    public isActive(): boolean {
+        return this.resolvedAt === null;
     }
 
     private static describe(
@@ -108,6 +133,10 @@ export class Alert extends AggregateRoot<AlertId> {
 
     public getTriggeredAt(): Date {
         return this.triggeredAt;
+    }
+
+    public getResolvedAt(): Date | null {
+        return this.resolvedAt;
     }
 
     public equals(other: Alert): boolean {

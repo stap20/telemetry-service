@@ -22,4 +22,19 @@ export class ReadDeviceRepository {
 
         return rows.map((row) => new DeviceEntity(row));
     }
+
+    // note: ownership is part of the WHERE clause, not a check the caller performs afterwards. A
+    // `findById` that returned the row and trusted every call site to compare ownerId would work
+    // until the one place that forgot — this shape makes "not mine" and "not there" the same
+    // null, so the leak is impossible to write rather than merely avoided.
+    async findOwnedById(
+        id: string,
+        ownerId: string,
+    ): Promise<DeviceEntity | null> {
+        const row = await this.prisma.device.findFirst({
+            where: { id, ownerId },
+        });
+
+        return row ? new DeviceEntity(row) : null;
+    }
 }
