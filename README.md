@@ -9,6 +9,30 @@ NestJS 11 · TypeScript · PostgreSQL (Prisma) · Redis · JWT
 
 ## Running it
 
+### With Docker (one command)
+
+```bash
+docker compose up --build
+```
+
+That brings up Postgres, Redis, a one-shot migration job and the API. Nothing else to install and no
+`.env` required — every value has a working default, and the API is on `http://localhost:3000` once
+the migration job exits cleanly.
+
+Three details worth knowing, because each is a decision rather than boilerplate:
+
+- **Migrations are their own service, not part of the API's startup.** Running them inside the app
+  container means every replica races to apply the same migration on deploy. As a separate job the
+  API can wait on `service_completed_successfully`, which is a real barrier rather than a sleep.
+- **The two databases are created by an init script**, not by `POSTGRES_DB` — that variable creates
+  one, and this project's modules own an isolated database each.
+- **`JWT_SECRET` defaults to a placeholder** so a reviewer can start the stack immediately. Anything
+  real must set it in the environment or a `.env` beside the compose file.
+
+`docker compose down -v` resets the databases; without `-v` the volume (and your data) survives.
+
+### Without Docker
+
 **Prerequisites:** Node 20+, PostgreSQL 14+, Redis 6+.
 
 ```bash
@@ -48,7 +72,6 @@ npm run ingest:sample       # feed sample_telemetry.json through the live endpoi
 npm run test:scenarios      # rate limit · offline backfill · date filtering · per-user isolation
 ```
 
-There is no `docker-compose.yml` yet — see [What I didn't get to](#what-i-didnt-get-to).
 
 ### The endpoints
 
@@ -317,9 +340,11 @@ intentional choice is distinguishable from an oversight when reading the diff.
 
 ## What I didn't get to
 
-**`docker-compose.yml` — not written.** Setup is currently "install Postgres and Redis yourself",
-which is more than the ten minutes the task allows for. This is the cheapest remaining item and
-should be first.
+**A real health endpoint.** The compose file health-checks Postgres and Redis, which have proper
+ones, and gates the API on those plus the migration job. The API itself has no health route to
+check — the startup banner used to advertise `/api/v1/heartbeat` and no controller ever implemented
+it, so the banner now stays quiet rather than promising a route that returns 404. That endpoint is
+the missing piece: with it, `depends_on` on the API would mean "serving" instead of "started".
 
 **An e2e suite inside `npm test`.** The three tests here are unit tests by choice — they are the
 three most valuable, and all three are fast and infrastructure-free. The real HTTP paths against
@@ -333,12 +358,10 @@ so what is missing is a pipeline that starts the stack and runs them — not the
 
 ### What I'd do next, in order
 
-1. `docker-compose.yml` for Postgres + Redis, so the whole thing starts with one command — and a
-   real health endpoint alongside it, which the compose healthcheck needs. (The startup banner used
-   to advertise `/api/v1/heartbeat`; no controller ever implemented it, so the banner now stays
-   quiet rather than promising a route that returns 404.)
-2. Wire `../test-harness` into CI against a compose-provisioned stack, so the ingest → cache → read
-   path is verified on every push rather than when someone remembers to run it.
+1. A real health endpoint, so the compose file can gate on the API *serving* rather than merely
+   having started — the one piece the container setup is currently missing.
+2. Wire `../test-harness` into CI against the compose-provisioned stack, so the ingest → cache →
+   read path is verified on every push rather than when someone remembers to run it.
 3. Compare-and-set on the cached latest state. The current guard is a read-modify-write, so two
    readings for one device arriving simultaneously can still let the older win. It is tolerable
    because the cache is not the source of truth and the next reading corrects it, but it is a real
