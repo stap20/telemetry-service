@@ -24,5 +24,6 @@
   "devices.temperature_threshold_invalid": "يجب أن يتراوح حد تنبيه درجة الحرارة بين {min} و {max}",
   "devices.alert_id_empty": "لا يمكن أن يكون معرّف التنبيه فارغًا",
   "devices.alert_id_invalid_format": "يجب أن يكون معرّف التنبيه معرّف UUID صالحًا",
-  "devices.alert_type_invalid": "يجب أن يكون نوع التنبيه إحدى القيم التالية: {allowed}"
+  "devices.alert_type_invalid": "يجب أن يكون نوع التنبيه إحدى القيم التالية: {allowed}",
+  "devices.latest_state_unavailable": "لم يرسل الجهاز {deviceId} أي بيانات قياس حتى الآن"
 }

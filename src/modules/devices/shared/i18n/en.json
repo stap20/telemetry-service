@@ -24,5 +24,6 @@
   "devices.temperature_threshold_invalid": "Temperature alert threshold must be between {min} and {max}",
   "devices.alert_id_empty": "Alert id cannot be empty",
   "devices.alert_id_invalid_format": "Alert id must be a valid UUID",
-  "devices.alert_type_invalid": "Alert type must be one of: {allowed}"
+  "devices.alert_type_invalid": "Alert type must be one of: {allowed}",
+  "devices.latest_state_unavailable": "Device {deviceId} has not reported any telemetry yet"
 }

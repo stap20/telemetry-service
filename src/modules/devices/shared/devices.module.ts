@@ -11,6 +11,7 @@ import ar from './i18n/ar.json';
 import { RegisterDeviceController } from '../internal/presentation/controllers/register-device.controller';
 import { ListDevicesController } from '../internal/presentation/controllers/list-devices.controller';
 import { RecordTelemetryController } from '../internal/presentation/controllers/record-telemetry.controller';
+import { GetLatestDeviceStateController } from '../internal/presentation/controllers/get-latest-device-state.controller';
 
 import { RegisterDeviceHandler } from '../internal/application/commands/register-device/register-device.handler';
 import { RecordTelemetryHandler } from '../internal/application/commands/record-telemetry/record-telemetry.handler';
@@ -21,6 +22,7 @@ import { IDeviceRepository } from '../internal/domain/repositories/device.repo.i
 import { ITelemetryEventRepository } from '../internal/domain/repositories/telemetry-event.repo.interface';
 import { IAlertRepository } from '../internal/domain/repositories/alert.repo.interface';
 import { IListDevicesHandler } from '../internal/application/queries/list-devices/list-devices.handler.interface';
+import { IGetLatestDeviceStateHandler } from '../internal/application/queries/get-latest-device-state/get-latest-device-state.handler.interface';
 import { IDeviceStateCache } from '../internal/application/contracts/device-state-cache.interface';
 import { ITelemetryThresholdsProvider } from '../internal/application/contracts/telemetry-thresholds.provider.interface';
 
@@ -29,9 +31,11 @@ import { TelemetryEventMapper } from '../internal/infrastructure/database/mapper
 import { AlertMapper } from '../internal/infrastructure/database/mappers/alert.mapper';
 import { DeviceRepository } from '../internal/infrastructure/repositories/device.repository';
 import { ReadDeviceRepository } from '../internal/infrastructure/repositories/read-device.repository';
+import { ReadTelemetryRepository } from '../internal/infrastructure/repositories/read-telemetry.repository';
 import { TelemetryEventRepository } from '../internal/infrastructure/repositories/telemetry-event.repository';
 import { AlertRepository } from '../internal/infrastructure/repositories/alert.repository';
 import { ListDevicesHandler } from '../internal/infrastructure/query-handlers/list-devices.handler';
+import { GetLatestDeviceStateHandler } from '../internal/infrastructure/query-handlers/get-latest-device-state.handler';
 import { DeviceStateCache } from '../internal/infrastructure/services/device-state.cache';
 import { TelemetryThresholdsProvider } from '../internal/infrastructure/services/telemetry-thresholds.provider';
 import { DevicesPrismaConnection } from '../internal/infrastructure/database/devices-prisma.connection';
@@ -60,6 +64,7 @@ import { IDevicesPrismaClient } from '../internal/infrastructure/database/device
         TelemetryEventMapper,
         AlertMapper,
         ReadDeviceRepository,
+        ReadTelemetryRepository,
         { provide: IDeviceRepository, useClass: DeviceRepository },
         {
             provide: ITelemetryEventRepository,
@@ -72,11 +77,16 @@ import { IDevicesPrismaClient } from '../internal/infrastructure/database/device
             useClass: TelemetryThresholdsProvider,
         },
         { provide: IListDevicesHandler, useClass: ListDevicesHandler },
+        {
+            provide: IGetLatestDeviceStateHandler,
+            useClass: GetLatestDeviceStateHandler,
+        },
     ],
     controllers: [
         RegisterDeviceController,
         ListDevicesController,
         RecordTelemetryController,
+        GetLatestDeviceStateController,
     ],
 })
 export class DevicesModule implements OnModuleInit {

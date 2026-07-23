@@ -28,6 +28,12 @@ export class DeviceStateCache implements IDeviceStateCache {
         );
     }
 
+    async findLatest(deviceId: string): Promise<LatestDeviceState | null> {
+        return this.cache.get<LatestDeviceState>(
+            DeviceStateCache.keyFor(deviceId),
+        );
+    }
+
     // note: the TTL is what makes the cached state honest. A device that stops reporting should stop
     // having a "current" state rather than serving a stale one forever — the entry expiring IS the
     // signal that we no longer know where the device is.
