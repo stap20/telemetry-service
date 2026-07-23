@@ -50,16 +50,24 @@ model TelemetryEvent {
 // TelemetryThresholdBreachedEvent, NOT on the ingestion write path: raising the alert is a
 // downstream side effect, so the POST stays fast and a failing alert never rejects a valid reading.
 // `value` is the reading that breached, `threshold` the limit it crossed; both kept for the record.
+// note: `resolvedAt` is what makes an alert "active" — null means the condition is still true. It is
+// nullable rather than a boolean `active` flag because WHEN it cleared is itself audit data, and a
+// boolean would throw that away. The row is never deleted: a breach that happened stays in the log
+// even after it recovers. The partial-friendly (deviceId, type, resolvedAt) index serves the only
+// two queries that exist — "open alerts for this device and rule" on the resolve path, and the
+// owner-scoped active list.
 model Alert {
-  id          String   @id
+  id          String    @id
   deviceId    String
   type        String
   message     String
   value       Float
   threshold   Float
   triggeredAt DateTime
-  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
 
   @@index([deviceId, createdAt])
+  @@index([deviceId, type, resolvedAt])
   @@map("alerts")
 }
