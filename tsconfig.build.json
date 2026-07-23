@@ -1,4 +1,13 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+  "exclude": [
+    "node_modules",
+    "test",
+    "dist",
+    "**/*spec.ts",
+    // note: Prisma filters excluded from the build until the schema/client is generated (deferred).
+    // Remove these two lines after `prisma generate` to bring the filters back into compilation.
+    "src/shared/infrastructure/filters/prisma-known-exception.filter.ts",
+    "src/shared/infrastructure/filters/prisma-unknown-exception.filter.ts"
+  ]
 }
