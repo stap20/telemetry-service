@@ -1,8 +1,12 @@
 // cypod-telemetry
 // src/modules/auth/shared/auth.module.ts
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 
 import { SecurityModule } from 'src/modules/security/shared/security.module';
+import { LocalizationService } from 'src/shared/infrastructure/i18n/localization.service';
+
+import en from './i18n/en.json';
+import ar from './i18n/ar.json';
 
 import { RegisterController } from '../internal/presentation/controllers/register.controller';
 import { LoginController } from '../internal/presentation/controllers/login.controller';
@@ -41,4 +45,12 @@ import { IAuthPrismaClient } from '../internal/infrastructure/database/auth.pris
     ],
     controllers: [RegisterController, LoginController, LogoutController],
 })
-export class AuthModule {}
+export class AuthModule implements OnModuleInit {
+    // note: auth publishes its OWN shared/i18n catalogs — the only place auth's error wording lives.
+    constructor(private readonly localization: LocalizationService) {}
+
+    onModuleInit(): void {
+        this.localization.register('en', en);
+        this.localization.register('ar', ar);
+    }
+}

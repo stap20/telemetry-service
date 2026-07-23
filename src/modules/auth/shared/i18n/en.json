@@ -1,0 +1,12 @@
+{
+  "auth.user_already_exists": "User with email {email} already exists",
+  "auth.invalid_credentials": "Invalid credentials provided",
+  "auth.user_not_found": "User with the provided credentials was not found",
+  "auth.user_inactive": "The user account is inactive",
+  "auth.invalid_email": "Invalid email format: {email}",
+  "auth.password_too_short": "Password must be at least {min} characters long",
+  "auth.name_empty": "{field} cannot be empty",
+  "auth.name_too_short": "{field} must be at least 2 characters long",
+  "auth.name_too_long": "{field} cannot be longer than 50 characters",
+  "auth.name_invalid_format": "{field} contains invalid characters"
+}

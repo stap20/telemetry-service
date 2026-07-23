@@ -13,7 +13,10 @@ export class JwtAuthGuard implements CanActivate {
         const token = this.extractToken(request);
 
         if (!token) {
-            throw new UnauthorizedError('No authentication token provided');
+            throw new UnauthorizedError(
+                'No authentication token provided',
+                'security.no_token',
+            );
         }
 
         try {
@@ -22,7 +25,10 @@ export class JwtAuthGuard implements CanActivate {
         } catch {
             // note: collapse every jwt failure (expired/malformed/not-active) into a single 401 —
             // a client has no use for the distinction and it avoids leaking token internals.
-            throw new UnauthorizedError('Invalid or expired authentication token');
+            throw new UnauthorizedError(
+                'Invalid or expired authentication token',
+                'security.invalid_token',
+            );
         }
     }
 
