@@ -8,7 +8,7 @@
   "devices.device_owner_invalid_format": "يجب أن يكون معرّف مالك الجهاز معرّف UUID صالحًا",
   "devices.device_already_exists": "الجهاز الذي يحمل المعرّف {id} مُسجَّل بالفعل",
   "devices.device_not_found": "لم يتم العثور على جهاز يحمل المعرّف {id}",
-  "devices.battery_level_invalid": "يجب أن يكون مستوى البطارية رقمًا صحيحًا",
+  "devices.battery_level_invalid": "يجب أن يكون مستوى البطارية رقمًا",
   "devices.battery_level_out_of_range": "يجب أن يتراوح مستوى البطارية بين {min} و {max}",
   "devices.temperature_invalid": "يجب أن تكون درجة الحرارة رقمًا صالحًا",
   "devices.temperature_out_of_range": "يجب أن تتراوح درجة الحرارة بين {min} و {max} درجة مئوية",

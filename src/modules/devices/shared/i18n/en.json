@@ -8,7 +8,7 @@
   "devices.device_owner_invalid_format": "Device owner id must be a valid UUID",
   "devices.device_already_exists": "Device with id {id} is already registered",
   "devices.device_not_found": "Device with id {id} was not found",
-  "devices.battery_level_invalid": "Battery level must be a whole number",
+  "devices.battery_level_invalid": "Battery level must be a number",
   "devices.battery_level_out_of_range": "Battery level must be between {min} and {max}",
   "devices.temperature_invalid": "Temperature must be a valid number",
   "devices.temperature_out_of_range": "Temperature must be between {min} and {max} degrees Celsius",

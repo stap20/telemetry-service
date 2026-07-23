@@ -4,7 +4,7 @@ import { ValidationDomainError } from 'src/shared/domain/errors/validation.domai
 export class InvalidBatteryLevelError extends ValidationDomainError {
     constructor() {
         super(
-            'Battery level must be a whole number',
+            'Battery level must be a number',
             'devices.battery_level_invalid',
         );
     }

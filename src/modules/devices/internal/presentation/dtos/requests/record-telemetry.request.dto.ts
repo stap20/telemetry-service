@@ -1,8 +1,9 @@
 // cypod-telemetry
 // src/modules/devices/internal/presentation/dtos/requests/record-telemetry.request.dto.ts
-import { IsInt, IsNumber, IsEnum, IsDate } from 'class-validator';
+import { IsNumber, IsEnum, IsDate } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+import { CoerceNumericString } from 'src/shared/infrastructure/decorators/coerce-numeric-string.decorator';
 import { DeviceStatusValue } from '../../../domain/value-objects/telemetry/device-status.vo';
 
 // note: this layer validates SHAPE (is it a number, is it a parseable date, is it a known status);
@@ -13,16 +14,18 @@ import { DeviceStatusValue } from '../../../domain/value-objects/telemetry/devic
 // No `deviceId` field: the device comes from the URL and the owner from the JWT.
 export class RecordTelemetryRequestDto {
     @ApiProperty({
-        description: 'Battery charge remaining, as a whole percentage',
-        example: 87,
+        description: 'Battery charge remaining, as a percentage',
+        example: 87.4,
     })
-    @IsInt()
+    @CoerceNumericString()
+    @IsNumber()
     battery: number;
 
     @ApiProperty({
         description: 'Temperature reading in degrees Celsius',
         example: 21.5,
     })
+    @CoerceNumericString()
     @IsNumber()
     temperature: number;
 
@@ -37,7 +40,7 @@ export class RecordTelemetryRequestDto {
     @ApiProperty({
         description: 'Reported device status',
         enum: DeviceStatusValue,
-        example: DeviceStatusValue.ONLINE,
+        example: DeviceStatusValue.OK,
     })
     @IsEnum(DeviceStatusValue)
     status: DeviceStatusValue;
