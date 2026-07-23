@@ -14,6 +14,8 @@ import { DeviceId } from '../../../domain/value-objects/device-id.vo';
 import { DeviceNotFoundError } from '../../errors/device-not-found.error';
 import { IDeviceStateCache } from '../../contracts/device-state-cache.interface';
 import { ITelemetryThresholdsProvider } from '../../contracts/telemetry-thresholds.provider.interface';
+import { ITelemetryRateLimiter } from '../../contracts/telemetry-rate-limiter.interface';
+import { TelemetryRateLimitExceededError } from '../../errors/telemetry-rate-limit-exceeded.error';
 import { RecordTelemetryCommand } from './record-telemetry.command';
 import { RecordTelemetryResponse } from './record-telemetry.response';
 
@@ -31,6 +33,8 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
         private readonly deviceStateCache: IDeviceStateCache,
         @Inject(ITelemetryThresholdsProvider)
         private readonly thresholdsProvider: ITelemetryThresholdsProvider,
+        @Inject(ITelemetryRateLimiter)
+        private readonly rateLimiter: ITelemetryRateLimiter,
         @Inject(IEventBus) private readonly eventBus: IEventBus,
     ) {
         super();
@@ -52,6 +56,12 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
         if (!device || !device.isOwnedBy(command.ownerId)) {
             throw new DeviceNotFoundError(command.deviceId);
         }
+
+        // note: throttled AFTER ownership is proven, never before. The budget belongs to the device,
+        // so spending it on behalf of a caller who does not own the device would turn the rate limit
+        // into a way to silence someone else's hardware — a denial of service delivered through the
+        // very feature meant to prevent one.
+        await this.enforceRateLimit(command);
 
         // note: the aggregate validates every field and evaluates the thresholds as one step, so
         // nothing reaches the database until the whole payload is known to be good.
@@ -117,6 +127,23 @@ export class RecordTelemetryHandler extends CommandHandlerBase<
             alertsRaised,
             false,
         );
+    }
+
+    // note: the budget is spent before we know whether the reading is a duplicate, so replaying the
+    // same batch over and over does eventually get throttled. That is intended: one replay is a
+    // device recovering, ten replays of the same minute is a device malfunctioning, and the limiter
+    // cannot tell the difference from any single request — only from how many of them there are.
+    private async enforceRateLimit(
+        command: RecordTelemetryCommand,
+    ): Promise<void> {
+        const decision = await this.rateLimiter.consume(
+            command.deviceId,
+            command.timestamp,
+        );
+
+        if (!decision.allowed) {
+            throw new TelemetryRateLimitExceededError(decision.limit ?? 0);
+        }
     }
 
     // note: the cache is a derived read optimisation, not the source of truth. The reading is

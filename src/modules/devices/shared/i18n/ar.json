@@ -15,6 +15,7 @@
   "devices.latitude_invalid": "يجب أن يتراوح خط العرض بين {min} و {max}",
   "devices.longitude_invalid": "يجب أن يتراوح خط الطول بين {min} و {max}",
   "devices.coordinates_partial": "يجب توفير خط العرض وخط الطول معًا",
+  "devices.telemetry_rate_limited": "عدد كبير جدًا من قراءات القياس عن بُعد؛ الحد المسموح به هو {limit} في الدقيقة",
   "devices.device_status_empty": "لا يمكن أن تكون حالة الجهاز فارغة",
   "devices.device_status_invalid": "يجب أن تكون حالة الجهاز إحدى القيم التالية: {allowed}",
   "devices.telemetry_timestamp_invalid": "يجب أن يكون توقيت القراءة تاريخًا صالحًا",

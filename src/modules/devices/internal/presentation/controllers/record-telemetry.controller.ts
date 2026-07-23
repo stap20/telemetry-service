@@ -53,6 +53,11 @@ export class RecordTelemetryController {
     })
     @ApiResponse({ status: 400, description: 'Invalid telemetry payload' })
     @ApiResponse({ status: 404, description: 'Device not found for this user' })
+    @ApiResponse({
+        status: 429,
+        description:
+            'The device has exceeded its allowed number of readings per minute',
+    })
     async record(
         @Param('id') deviceId: string,
         @Body() dto: RecordTelemetryRequestDto,

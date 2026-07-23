@@ -16,6 +16,7 @@ import { BadRequestError } from '../../application/errors/bad-request.error';
 import { ConflictError } from '../../application/errors/conflict.error';
 import { UnauthorizedError } from '../../application/errors/unauthorized.error';
 import { NotFoundError } from '../../application/errors/notfound.error';
+import { TooManyRequestsError } from '../../application/errors/too-many-requests.error';
 import { ILogger } from '../../domain/contracts/logger.interface';
 import { LocalizationService } from '../i18n/localization.service';
 
@@ -74,6 +75,11 @@ export class GlobalErrorFilter implements ExceptionFilter {
                 status = HttpStatus.UNAUTHORIZED;
             } else if (error instanceof NotFoundError) {
                 status = HttpStatus.NOT_FOUND;
+                // note: must stay ABOVE the generic ApplicationError branch — it is a subclass, and
+                // the first matching arm wins, so putting it after would quietly downgrade every
+                // 429 to a 400 and tell flooding devices to stop retrying instead of to slow down.
+            } else if (error instanceof TooManyRequestsError) {
+                status = HttpStatus.TOO_MANY_REQUESTS;
             } else if (error instanceof ApplicationError) {
                 status = HttpStatus.BAD_REQUEST;
             } else if (error instanceof InfrastructureError) {
