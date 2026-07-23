@@ -1,318 +1,254 @@
 # Cypod Telemetry Service
 
-An IoT fleet telemetry service: ingests device readings, stores them, caches each device's latest
-known state for fast dashboard reads, and raises alerts when a reading crosses a threshold.
+Ingests IoT device readings, stores them, caches each device's latest state for fast dashboard
+reads, and raises alerts when a reading crosses a threshold.
 
 NestJS 11 · TypeScript · PostgreSQL (Prisma) · Redis · JWT
+
+The React console is in [`../Frontend`](../Frontend) — login, fleet polling every ~5s, device detail
+with filterable history, alerts panel, and an English/Arabic switcher with `dir="rtl"`.
 
 ---
 
 ## Running it
 
-### With Docker (one command)
-
 ```bash
-docker compose up --build
+docker compose up --build     # Postgres + Redis + migrations + API on :3000
 ```
 
-That brings up Postgres, Redis, a one-shot migration job and the API. Nothing else to install and no
-`.env` required — every value has a working default, and the API is on `http://localhost:3000` once
-the migration job exits cleanly.
+No install and no `.env` — every value has a working default. Three decisions worth noting:
 
-Three details worth knowing, because each is a decision rather than boilerplate:
+- **Migrations are their own service.** Inside the app container every replica races to apply the
+  same migration; as a separate job the API waits on `service_completed_successfully` — a real
+  barrier, not a sleep.
+- **Both databases come from an init script**, not `POSTGRES_DB`, which creates only one.
+- **`JWT_SECRET` defaults to a placeholder** so the stack starts immediately. Anything real must set it.
 
-- **Migrations are their own service, not part of the API's startup.** Running them inside the app
-  container means every replica races to apply the same migration on deploy. As a separate job the
-  API can wait on `service_completed_successfully`, which is a real barrier rather than a sleep.
-- **The two databases are created by an init script**, not by `POSTGRES_DB` — that variable creates
-  one, and this project's modules own an isolated database each.
-- **`JWT_SECRET` defaults to a placeholder** so a reviewer can start the stack immediately. Anything
-  real must set it in the environment or a `.env` beside the compose file.
+`docker compose down -v` resets the databases; without `-v` the data survives.
 
-`docker compose down -v` resets the databases; without `-v` the volume (and your data) survives.
-
-### Without Docker
-
-**Prerequisites:** Node 20+, PostgreSQL 14+, Redis 6+.
+<details>
+<summary><b>Without Docker</b> — Node 20+, PostgreSQL 14+, Redis 6+</summary>
 
 ```bash
-npm install                 # postinstall generates both Prisma clients
-cp .env.example .env        # then edit — see below
+npm install              # postinstall generates both Prisma clients
+cp .env.example .env     # set AUTH_DATABASE_URL, DEVICES_DATABASE_URL, JWT_SECRET, Redis host/port
 ```
-
-Create the two databases. Each module owns an isolated one (see [Architecture](#architecture)):
 
 ```sql
-CREATE DATABASE auth_db;
+CREATE DATABASE auth_db;      -- each module owns an isolated database
 CREATE DATABASE devices_db;
 ```
 
-Fill in `.env` — at minimum `AUTH_DATABASE_URL`, `DEVICES_DATABASE_URL`, `JWT_SECRET`, and the
-Redis host/port. Every other value has a working default and is documented in `.env.example`.
+```bash
+npm run auth:db:deploy && npm run devices:db:deploy
+npm run start:dev        # Swagger at /api; routes under /api/v1
+```
+</details>
 
 ```bash
-npm run auth:db:deploy      # apply migrations
-npm run devices:db:deploy
-npm run start:dev
+npm test                 # the three tests — 3 suites, 10 cases, no infrastructure
 ```
 
-Swagger UI is at `http://localhost:3000/api`. All API routes are prefixed `/api/v1`.
-
-```bash
-npm test                    # the three tests
-```
-
-Everything that drives the *running* service — replaying `sample_telemetry.json` and the asserted
-scenarios — lives in [`../test-harness`](../test-harness), outside this project on purpose: it is a
-black-box HTTP client with no access to this code, config or database.
+Everything driving the *running* service lives in [`../test-harness`](../test-harness), outside this
+project on purpose: a black-box HTTP client with no access to this code, config or database.
 
 ```bash
 cd ../test-harness
-npm run ingest:sample       # feed sample_telemetry.json through the live endpoint
-npm run test:scenarios      # rate limit · offline backfill · date filtering · per-user isolation
+npm run ingest:sample    # replay sample_telemetry.json through the live endpoint
+npm run test:scenarios   # rate limit · offline backfill · date filtering · per-user isolation
 ```
 
-
-### The endpoints
+### Endpoints
 
 | Method | Route | Notes |
 |---|---|---|
 | POST | `/auth/register`, `/auth/login` | JWT; everything below needs `Authorization: Bearer` |
 | POST | `/devices` | owner comes from the token, never the body |
 | GET | `/devices` | the caller's devices |
-| POST | `/devices/:id/telemetry` | rate limited; see [section 6](#the-two-requirements-to-reconcile) |
+| POST | `/devices/:id/telemetry` | rate limited — see [section 6](#the-two-requirements-to-reconcile) |
 | GET | `/devices/:id/latest` | cache-first; sets `X-Cache-Status: HIT\|MISS` |
-| GET | `/devices/:id/history?from=&to=&offset=&limit=` | newest first; `from`/`to` are independently optional and **inclusive**, `limit` capped at 100 |
+| GET | `/devices/:id/history?from=&to=&offset=&limit=` | newest first; `from`/`to` independently optional and **inclusive**; `limit` capped at 100 |
 | GET | `/alerts` | unresolved alerts across the caller's devices |
 
-Every endpoint honours `Accept-Language: en\|ar` for error messages and falls back to English.
+Every endpoint honours `Accept-Language: en\|ar`, falling back to English.
 
 ---
 
 ## What I found in the sample data
 
-`sample_telemetry.json` holds 529 readings from six device ids over four hours. Feeding it in:
+529 readings, six device ids, four hours. Feeding it in: **523 accepted** (1 a duplicate already
+stored), **6 rejected**, **10 alerts raised**.
 
-```
-readings in file : 529
-accepted         : 523  (of which 1 was a duplicate already stored)
-stored as new    : 522
-rejected         : 6
-alerts raised    : 10
-```
+One rule governs every decision below: **reject when repairing the row would mean inventing data;
+accept when there is exactly one thing it could have meant.**
 
-Every decision below follows one rule: **reject when repairing the row would mean inventing data;
-accept when there is exactly one thing it could have meant.** `battery: "88"` has a single possible
-intent, so it is coerced. `battery: 127` has no correct value to substitute — clamping it to 100
-would hide a broken sensor behind a plausible number — so it is refused.
-
-### The two biggest findings were not dirty rows — they were my own wrong assumptions
+### The two biggest findings were my own wrong assumptions, not dirty rows
 
 | I had modelled | The fleet actually sends | Rows affected |
 |---|---|---|
 | `status` as `ONLINE \| OFFLINE \| IDLE \| ERROR` | `OK` and `FAULT` | all 529 |
 | `battery` as `@IsInt()` and an `Int` column | fractional percents — `27.7`, `76.9` | 471 of 528 |
 
-Either one alone meant the endpoint could not ingest a single row of the file before this work.
-
-I adopted the fleet's vocabulary rather than translating at the edge: mapping `OK → ONLINE` would
-have looked tidier and would have destroyed the distinction between what the device said and what I
-decided it meant. A device vocabulary is part of the integration contract; the devices win. Battery
-became a `Float` for the same reason — rounding at the edge throws away real precision to satisfy a
-constraint nothing had asked for.
+Either one alone meant the endpoint could not ingest a single row of the file. I took the fleet's
+vocabulary instead of translating at the edge — mapping `OK → ONLINE` looks tidier and destroys the
+distinction between what the device said and what I decided it meant. Battery became a `Float` for
+the same reason: rounding throws away real precision to satisfy a constraint nothing asked for.
 
 ### The seeded anomalies
 
-| What | Rows | Decision | API returns |
+| What | Rows | Decision | Returns |
 |---|---|---|---|
-| `DEV-9999` — never registered | 4 | **Reject.** Accepting would let anyone create a device by posting to it, and telemetry attributed to an unknown owner is unreadable by every query in the system. | `404` |
-| `battery: 127`, `battery: -5` | 2 | **Reject.** Outside 0–100 is physically impossible, and there is no correct value to substitute. | `400` |
-| `battery: "88"` (string) | 1 | **Accept, coerce to `88`.** An unambiguous JSON typing slip with exactly one possible intent. | `201` |
-| `temperature: 850` with `status: FAULT` | 1 | **Accept, store, and alert.** The physical-plausibility bound (−273.15 to 1000 °C) is deliberately not the alert threshold: 850 °C is a valid reading describing a device on fire or a failed sensor, and the device *itself* says `FAULT`. Dropping it would silently discard the most alarming reading in the file. | `201`, 1 alert |
-| `lat: null, lng: null` | 1 | **Accept without a position.** No GPS fix is an ordinary condition; battery and temperature are still valid and are what the alert rules run on. Storing `0,0` would put the device in the Atlantic. One coordinate without the other is now rejected — that is a lost field, not a device without a fix. | `201` |
-| `status` key absent | 1 | **Accept as `UNKNOWN`.** Defaulting to `OK` would fabricate a health report; `UNKNOWN` keeps "the device did not say" distinguishable from "the device is fine". | `201` |
-| exact duplicate row | 1 pair | **Accept idempotently.** `(deviceId, recordedAt)` is the natural key — a device has one state at one instant — so the second copy is absorbed, no second alert is raised, and the response carries `duplicate: true`. | `200`, `duplicate: true` |
-| `received_at` present | 40 | **Signal, not input.** These are one device's offline backlog — see below. The field is dropped: when a reading reached us is a fact about the network, not about the device. | `201` |
+| `DEV-9999` — never registered | 4 | **Reject.** Accepting lets anyone create a device by posting to it, and telemetry owned by nobody is unreadable by every query in the system. | `404` |
+| `battery: 127`, `battery: -5` | 2 | **Reject.** Outside 0–100 is impossible, and clamping to 100 would hide a broken sensor behind a plausible number. | `400` |
+| `battery: "88"` (string) | 1 | **Accept, coerce to `88`.** A JSON typing slip with one possible intent. | `201` |
+| `temperature: 850` + `status: FAULT` | 1 | **Accept, store, alert.** The plausibility bound (−273.15–1000 °C) is deliberately not the alert threshold: 850 °C validly describes a device on fire, and the device *itself* says `FAULT`. Dropping it discards the most alarming reading in the file. | `201` + alert |
+| `lat: null, lng: null` | 1 | **Accept without a position.** No GPS fix is ordinary, and battery/temperature still drive the alert rules. `0,0` would put the device in the Atlantic. One coordinate without the other *is* rejected — that's a lost field, not a missing fix. | `201` |
+| `status` key absent | 1 | **Accept as `UNKNOWN`.** Defaulting to `OK` fabricates a health report; `UNKNOWN` keeps "didn't say" distinct from "is fine". | `201` |
+| exact duplicate row | 1 pair | **Accept idempotently.** `(deviceId, recordedAt)` is the natural key — one state per instant — so the copy is absorbed, no second alert fires, response carries `duplicate: true`. | `200` |
+| `received_at` present | 40 | **Signal, not input.** One device's offline backlog (below). Dropped: when a reading reached us is a fact about the network, not the device. | `201` |
 | rows shuffled, arrival ≠ chronological | throughout | **Handled.** "Latest" means latest by `recordedAt`, not last received. | — |
 
-Every stored row reconciles exactly: DEV-1001 97→96 (battery 127), DEV-1002 93→92 (duplicate),
-DEV-1003 103→103, DEV-1004 131→130 (battery −5), DEV-1005 101→101, DEV-9999 4→0.
-
-Of the 10 alerts raised, 9 were auto-resolved by later healthy readings from the same device and one
-`LOW_BATTERY` remains active — the alert lifecycle exercised end to end by real data.
+Every stored row reconciles: DEV-1001 97→96 (battery 127), DEV-1002 93→92 (duplicate), DEV-1003
+103→103, DEV-1004 131→130 (battery −5), DEV-1005 101→101, DEV-9999 4→0. Of the 10 alerts, 9 were
+auto-resolved by later healthy readings and one `LOW_BATTERY` stays active — the alert lifecycle
+exercised end to end by real data.
 
 ---
 
 ## The two requirements to reconcile
 
 > 1. A device may not post more than 10 readings per minute.
-> 2. A device that has been offline must not lose the readings it buffered while it was down.
+> 2. A device that has been offline must not lose the readings it buffered while down.
 
-The sample data contains this collision literally: **DEV-1004 buffered 40 readings covering
-08:10–08:49 and flushed all 40 at 09:20** — forty readings in one minute, against a limit of ten.
+The sample data contains the collision literally: **DEV-1004 buffered 40 readings covering
+08:10–08:49 and flushed all 40 at 09:20.**
 
 They only conflict if "per minute" means *arrival* time. It doesn't have to.
 
-**The limit is measured against the minute each reading _describes_, not the minute it arrives.**
+**The limit counts the minute each reading _describes_, not the minute it arrives.**
 
-- A malfunctioning device flooding the API produces many readings stamped *now* — they all land in
-  the same recorded minute, and the eleventh is refused.
-- A recovering device produces readings spread across the period it was offline — one per recorded
-  minute, so the whole backlog passes untouched.
+| | Timestamps | Outcome |
+|---|---|---|
+| Device flooding | all stamped *now* → 1 recorded minute | the eleventh is refused |
+| Device catching up | 08:10, 08:11 … 08:49 → 40 recorded minutes | the whole backlog passes |
 
-A device floods the clock it is living in; a device catching up does not. The rule needs no special
-"backfill mode", no separate endpoint, and no trust in a client-supplied flag saying "this is a
-replay" — which a compromised device would simply always set.
+A device floods the clock it lives in; a device catching up does not. No backfill mode, no second
+endpoint, and no trusting a client-supplied "this is a replay" flag — which a compromised device
+would simply always set.
 
-That leaves one hole: a compromised device could fabricate timestamps spread across thousands of
-distinct minutes and never trip a density check. So there is a second, much looser ceiling on raw
-requests per device per wall-clock minute (default 600). That one is not the task's rate limit; it
-bounds request volume so the first rule cannot be walked around.
+The remaining hole is forged timestamps spread across thousands of fake minutes, so a second, much
+looser ceiling caps raw requests per device per wall-clock minute (default 600). That is not the
+task's limit; it just stops the first rule being walked around.
 
-Counters live in Redis, because the limit belongs to the *device* and not to whichever instance
-answered — two instances each keeping their own tally would let a flooding device through at twice
-the configured rate, and the limit would weaken every time the service was scaled out.
-
-**It fails open.** If Redis is unreachable the choice is between dropping readings from healthy
-devices and briefly not throttling a sick one. Telemetry that is never sent again is gone for good;
-an unthrottled minute costs some rows in an append-only table. If this limit were a security
-boundary rather than a hygiene measure, it would have to fail closed — that is the trade, made
-deliberately and marked at the call site.
-
-Throttling happens *after* ownership is proven, so a stranger holding a valid token cannot spend
-someone else's budget and silence their hardware through the very feature meant to prevent that.
+- **Counters live in Redis**, because the limit belongs to the *device*, not to whichever instance
+  answered — two instances each keeping their own tally would let a flooder through at twice the
+  configured rate, weakening the limit every time the service scaled out.
+- **It fails open.** If Redis is down, the choice is dropping readings from healthy devices or
+  briefly not throttling a sick one. Telemetry never re-sent is gone for good; an unthrottled minute
+  costs rows in an append-only table. A security boundary would have to fail closed — that trade is
+  marked at the call site.
+- **Throttling runs after ownership is proven**, so a stranger with a valid token cannot spend your
+  device's budget and silence your hardware using the feature meant to prevent exactly that.
 
 ---
 
 ## Caching
 
-### Strategy: write-through on ingest, read-through on miss
+**Strategy: write-through on ingest, read-through on miss.** Both halves, deliberately.
 
-Both halves, deliberately:
-
-- **On ingest**, an accepted reading updates the cached latest state immediately in the same
-  request. The task requires the cache not wait for the TTL, and a dashboard polling every 5s would
-  otherwise show a device as stale seconds after it reported.
+- **On ingest**, an accepted reading updates the cached state immediately in the same request. The
+  cache must not wait for the TTL, and a dashboard polling every 5s would otherwise show a device
+  stale seconds after it reported.
 - **On read**, a miss falls back to the database and repopulates. A miss is an ordinary outcome, not
-  an error — and so is Redis being unreachable, which is logged and then treated as a miss, so the
-  endpoint degrades to *slow* rather than to *broken*.
+  an error — and so is Redis being unreachable, which is logged and treated as a miss, so the
+  endpoint degrades to *slow* rather than *broken*.
 
-The cache is never the source of truth. Every value in it is derivable from Postgres, so a total
-Redis loss costs latency and nothing else. That is also why a failed cache write does not fail an
-ingest that has already been durably stored — a Redis hiccup must not make a device retry a write
-we already accepted.
+The cache is never the source of truth; every value is derivable from Postgres, so total Redis loss
+costs latency only. That is also why a failed cache write doesn't fail an ingest already stored — a
+Redis hiccup must not make a device retry a write we accepted. `GET /devices/:id/latest` reports the
+path in the log **and** in `X-Cache-Status`, so it's verifiable with plain `curl`; it stays out of
+the body because where we found the state is metadata about the request, not part of the resource.
 
-`GET /devices/:id/latest` reports which path served it in the log **and** in an `X-Cache-Status`
-header, so the behaviour is verifiable with plain `curl` rather than only from server logs. It stays
-out of the JSON body: the body is the device's state, and where we found that state is metadata
-about the request, not part of the resource.
+**TTL: 3600s.** Not a performance knob — it's what makes the cached value *honest*. Since every
+write invalidates immediately, the TTL never bounds staleness from writes. Its only job: **how long
+after a device goes silent do we keep claiming to know where it is?** An hour is long enough that a
+device on a normal cadence (1–3 min) never falls out during healthy operation, short enough that a
+dead device stops having a "current" state instead of serving a fossil for ever. The entry expiring
+*is* the signal that we no longer know. Configurable via `TELEMETRY_LATEST_STATE_TTL_SECONDS`,
+defaulted so a missing env var can't stop the service booting.
 
-### TTL: 3600 seconds
-
-The TTL is not a performance knob here — it is what makes the cached value *honest*.
-
-Because every write invalidates immediately, the TTL never exists to bound staleness from writes.
-Its only job is to answer: **how long after a device goes silent should we keep claiming to know
-where it is?** An hour is long enough that a device on a normal reporting cadence (these report
-every 1–3 minutes) never falls out of cache during healthy operation, and short enough that a device
-which died stops having a "current" state within an hour rather than serving a fossil indefinitely.
-The entry expiring *is* the signal that we no longer know.
-
-Configurable via `TELEMETRY_LATEST_STATE_TTL_SECONDS`. It defaults rather than being required — a
-missing env var should not stop the service booting.
-
-One correctness rule that matters more than the TTL: **"latest" means latest by `recordedAt`, not
-last received.** A device replaying a backlog must not overwrite newer cached state with older
-readings, or a cache HIT and a cache MISS would answer the same question differently — the one thing
-a read-through cache must never do.
+One rule matters more than the TTL: **"latest" means latest by `recordedAt`, not last received.** A
+device replaying a backlog must not overwrite newer cached state with older readings, or a HIT and a
+MISS would answer the same question differently — the one thing a read-through cache must never do.
 
 ---
 
 ## Database
 
-### The index I added deliberately
+**The index I added deliberately:** `@@index([deviceId, recordedAt])`
 
-```prisma
-@@index([deviceId, recordedAt])
-```
+Every telemetry read is "the readings for *one* device, newest first" — latest-state takes the first
+row, history pages through them by time. A composite index in that order lets Postgres seek straight
+to one device's slice and walk it in index order, so both the page and its `ORDER BY` come free.
+Without it, `GET /history` is a full scan of the largest table in the system, slower every day.
 
-Every read of telemetry is "the readings for *one* device, newest first" — the latest-state fallback
-takes the first row, and history pages through them ordered by time. A composite index in that exact
-order lets Postgres seek straight to one device's slice and walk it in index order, so both the page
-and its `ORDER BY` come free. Without it, `GET /history` degrades into a full scan of the largest
-table in the system that gets slower every day the fleet runs.
-
-Also present, each for a specific query: `Device(ownerId)` for `GET /devices`,
-`Alert(deviceId, type, resolvedAt)` for finding a device's open alerts of one type during
-auto-resolution, and a **unique** constraint on `TelemetryEvent(deviceId, recordedAt)` which is not
-an optimisation at all — it is the natural key that makes ingestion idempotent.
+Also present: `Device(ownerId)` for `GET /devices`, `Alert(deviceId, type, resolvedAt)` for finding
+open alerts during auto-resolution, and a **unique** constraint on `TelemetryEvent(deviceId,
+recordedAt)` — not an optimisation, but the natural key that makes ingestion idempotent.
 
 ### If telemetry hit 50 million rows a day
 
-*(Design answer only — not built.)*
+*(Design answer only — not built.)* That's ~580 writes/sec sustained, ~18B rows a year. One
+unpartitioned table doesn't survive it: the B-tree outgrows RAM so every insert becomes random I/O,
+autovacuum falls behind, and deleting old data needs long table locks.
 
-50M rows/day is ~580 writes/second sustained and ~18 billion rows a year. A single unpartitioned
-Postgres table does not survive that: the `(deviceId, recordedAt)` B-tree eventually exceeds RAM, so
-every insert becomes random I/O, autovacuum falls behind, and deleting old data is impossible
-without long table locks.
+**Move out of plain SQL — the telemetry event stream:**
 
-**What I would move out of plain SQL — the telemetry event stream:**
+- **Partition by time** (declarative partitioning or TimescaleDB). Each insert touches a small hot
+  index, and retention becomes an instant lock-free `DROP PARTITION` instead of a vacuumed `DELETE`.
+- **Ingest through a log** (Kafka/Kinesis) instead of synchronous HTTP-to-Postgres. The endpoint
+  becomes validate-and-append, decoupling device-facing availability from write capacity and letting
+  the writer batch — 580 `INSERT`s/sec and 580 rows in one `COPY` are not the same workload.
+- **Roll up on write.** Almost nothing reads raw rows older than a day; dashboards want per-minute
+  or per-hour aggregates. Continuous aggregates with raw data on 7–30 day retention turns "scan 50M
+  rows" into "read 1,440 pre-computed buckets" — the real saving.
+- **Columnar cold storage** (Parquet on S3 via Athena/DuckDB) past that window. Telemetry is
+  append-only and analysed in wide ranges over few columns — exactly what columnar formats are for.
 
-- **Partition by time** (native declarative partitioning, or TimescaleDB hypertables). Daily or
-  hourly partitions mean each insert touches a small, hot index; retention becomes `DROP PARTITION`,
-  which is instant and lock-free, instead of a `DELETE` that has to be vacuumed.
-- **Ingest through a log** (Kafka/Kinesis) rather than a synchronous HTTP-to-Postgres write. The
-  endpoint's job becomes validate-and-append, which decouples device-facing availability from
-  database write capacity and lets the writer batch — the single biggest throughput win available,
-  since 580 individual `INSERT`s per second and 580 rows in one `COPY` are not the same workload.
-- **Roll up on write.** Almost nothing reads raw readings older than a day; dashboards ask for
-  per-device per-minute or per-hour aggregates. Continuous aggregates, with raw data on a short
-  retention (7–30 days) and rollups kept for years, is where the real saving is — the query pattern
-  changes from "scan 50M rows" to "read 1,440 pre-computed buckets".
-- **Column-oriented cold storage** (Parquet on S3, queried by Athena/DuckDB) for anything past the
-  raw retention window. Telemetry is append-only, never updated, and analysed in wide time ranges
-  over few columns — exactly what columnar formats are for, at a fraction of the storage cost.
+**Keep in SQL, unchanged:** devices, users, alerts. Small, highly relational, read constantly,
+updated transactionally. Alerts especially need row-level consistency — one must not be resolved
+twice. Their volume scales with *fleet* size, not reading rate, so they never become the problem.
 
-**What I would keep in SQL, unchanged:** devices, users, and alerts. They are small, highly
-relational, read constantly, and updated transactionally. Alerts in particular need row-level
-consistency — an alert must not be resolved twice, and the lifecycle here depends on that. Their
-volume is bounded by the *fleet* size, not by the reading rate, so they never become the problem.
-Moving them somewhere fashionable would cost real guarantees to solve a problem they don't have.
-
-The latest-state cache stays exactly as it is: it is already the answer to "the dashboard must not
-touch the event table for a routine read", and that is more true at 50M rows/day, not less.
+The latest-state cache stays as is: it's already the answer to "the dashboard must not touch the
+event table for a routine read", and that's more true at 50M rows/day, not less.
 
 ---
 
 ## The three tests
 
-`npm test` — 3 suites, 10 cases, no infrastructure required.
-
-1. **`telemetry-rate-limiter.spec.ts` — the limiter counts recorded minutes, not arrival minutes.**
-   This pins the single rule reconciling the two requirements in section 6. The reconciliation lives
-   entirely in *which* minute is counted, so a future refactor to an ordinary arrival-time throttle
-   would pass any naive rate-limit test while silently reintroducing data loss for offline devices —
-   the exact failure the requirement exists to prevent, and one nothing else would catch.
+1. **`telemetry-rate-limiter.spec.ts` — counts recorded minutes, not arrival minutes.** Pins the one
+   rule reconciling section 6. The reconciliation lives entirely in *which* minute is counted, so a
+   refactor to an ordinary arrival-time throttle would pass any naive rate-limit test while silently
+   reintroducing data loss for offline devices — the exact failure the requirement exists to prevent.
 
 2. **`record-telemetry.handler.spec.ts` — a replayed older reading must not overwrite newer cached
-   state.** A read-through cache is only useful if a HIT and a MISS answer identically. Writing the
-   cache on every accepted reading is the obvious implementation, *was* the original implementation,
-   and produced a cache that disagreed with the database — a bug invisible from either endpoint
-   alone and findable only by comparing the two.
+   state.** A read-through cache is only useful if HIT and MISS answer identically. Writing the cache
+   on every accepted reading is the obvious implementation, *was* the original one, and produced a
+   cache that disagreed with the database — invisible from either endpoint alone.
 
 3. **`telemetry-reading.spec.ts` — every reading reaches a verdict on every rule.** "Active alerts"
-   only means something because a healthy value is what *closes* an alert. Emitting events only when
-   a threshold is breached looks like a harmless optimisation, passes any test that checks alerting,
-   and quietly makes alerts permanent so `GET /alerts` grows for ever and stops meaning anything.
+   only means something because a healthy value is what *closes* an alert. Emitting events only on a
+   breach looks like a harmless optimisation, passes any alerting test, and quietly makes alerts
+   permanent so `GET /alerts` grows for ever and stops meaning anything.
 
-All three guard *reasoning* that a reasonable person would refactor away, rather than restating what
-the code obviously does.
+All three guard *reasoning* a reasonable person would refactor away, rather than restating what the
+code obviously does.
 
 ---
 
 ## Architecture
 
-Modular monolith, DDD, Clean Architecture, CQRS.
+Modular monolith · DDD · Clean Architecture · CQRS.
 
 ```
 src/modules/<module>/
@@ -324,80 +260,55 @@ src/modules/<module>/
     infrastructure/ Prisma schema + migrations, repositories, query handlers, services
 ```
 
-**Database per module.** `auth` and `devices` own separate Postgres databases and never join across
-them. Cross-concept identity (`Device.ownerId`, `Alert.deviceId`) is carried by value as a plain
-string, with no foreign key, so a module can be extracted without unpicking a join.
+- **Database per module.** `auth` and `devices` own separate databases and never join across them.
+  Cross-concept identity (`Device.ownerId`, `Alert.deviceId`) is carried by value with no foreign
+  key, so a module can be extracted without unpicking a join.
+- **Write vs read.** Commands go through aggregates owning the business rules; queries bypass the
+  domain and use read repositories returning response shapes directly.
+- **Errors** carry a translation key and are rendered per `Accept-Language` by one global filter, so
+  no controller formats a message.
+- **Log severity follows the *mapped* status.** A real defect found while driving the frontend: the
+  filter logged every exception at `ERROR` with a stack. A registered device that hasn't reported
+  answers `404` by design and the dashboard polls every ~5s, so one idle device produced endless
+  `ERROR`s for a healthy system — burying genuine `500`s and firing error-rate alarms. Now `5xx`
+  keeps `ERROR` + stack (ours to fix) and `4xx` logs `WARN` without one (the server was right).
 
-**Write vs read.** Commands go through aggregates that own the business rules; queries bypass the
-domain entirely and use read repositories returning response shapes directly.
-
-**Errors** carry a translation key and are rendered per `Accept-Language` by one global filter, so
-no controller ever formats a message.
-
-Trade-offs and deliberate shortcuts are marked `// note:` at the point of the decision, so an
-intentional choice is distinguishable from an oversight when reading the diff.
+Deliberate trade-offs are marked `// note:` at the decision point, so an intentional choice is
+distinguishable from an oversight when reading the diff.
 
 ---
 
 ## What I didn't get to
 
-**A real health endpoint.** The compose file health-checks Postgres and Redis, which have proper
-ones, and gates the API on those plus the migration job. The API itself has no health route to
-check — the startup banner used to advertise `/api/v1/heartbeat` and no controller ever implemented
-it, so the banner now stays quiet rather than promising a route that returns 404. That endpoint is
-the missing piece: with it, `depends_on` on the API would mean "serving" instead of "started".
+**A real health endpoint.** Compose health-checks Postgres and Redis and gates the API on those plus
+the migration job, but the API has no health route of its own. The startup banner used to advertise
+`/api/v1/heartbeat` that nothing implemented, so it now stays quiet rather than promising a 404.
 
-**An e2e suite inside `npm test`.** The three tests here are unit tests by choice — they are the
-three most valuable, and all three are fast and infrastructure-free. The real HTTP paths against
-real Postgres and Redis *are* covered, but by [`../test-harness`](../test-harness), which is run by
-hand rather than by CI. Its scenarios are already written as assertions with a non-zero exit code,
-so what is missing is a pipeline that starts the stack and runs them — not the tests themselves.
+**An e2e suite inside `npm test`.** The three tests are unit tests by choice — the three most
+valuable, all fast and infrastructure-free. Real HTTP against real Postgres and Redis *is* covered,
+by [`../test-harness`](../test-harness), but run by hand. Its scenarios are already assertions with a
+non-zero exit code, so what's missing is a pipeline, not the tests.
 
-> The React frontend, listed here as the largest gap for most of this work, is now built and lives
-> in [`../Frontend`](../Frontend) — login, fleet polling every ~5s, device detail with filterable
-> history, the alerts panel and the English/Arabic switcher with `dir="rtl"`.
+**Next, in order:**
 
-### What I'd do next, in order
-
-1. A real health endpoint, so the compose file can gate on the API *serving* rather than merely
-   having started — the one piece the container setup is currently missing.
-2. Wire `../test-harness` into CI against the compose-provisioned stack, so the ingest → cache →
-   read path is verified on every push rather than when someone remembers to run it.
-3. Compare-and-set on the cached latest state. The current guard is a read-modify-write, so two
-   readings for one device arriving simultaneously can still let the older win. It is tolerable
-   because the cache is not the source of truth and the next reading corrects it, but it is a real
-   race and it is documented at the call site rather than hidden.
-4. A device-health surface. The `850 °C`/`FAULT` reading is stored and alerted on as a temperature
-   breach, which is *a* right answer but not the whole one — a device reporting `FAULT` is saying
-   something about itself, not about the world, and that deserves its own signal rather than being
-   inferred from an implausible measurement.
-5. Structured JSON logging. `NestLogger` currently serialises context into the message string, which
-   is readable in a terminal and awkward for a log aggregator.
-
-### Logging severity follows the mapped status
-
-Worth calling out because it was a real defect found while driving the finished frontend: the global
-filter used to log *every* exception at `ERROR` with a stack trace. A registered device that has not
-reported yet answers `404` by design, and the dashboard polls each device every ~5s — so one idle
-device produced an endless stream of `ERROR` + stack for a system behaving perfectly. The cost is not
-noise for its own sake; it is that a genuine `500` becomes invisible in it, and any error-rate alarm
-built on that log fires because somebody registered a device.
-
-Severity is now chosen *after* the status is mapped: `5xx` keeps `ERROR` and the stack, because it is
-ours to fix. `4xx` logs at `WARN` without one — the server was right, and the trace would only point
-back at the throw site we meant to reach. Path, method and user go out at both levels, since "which
-client kept getting 429" is the question a 4xx line actually needs to answer.
+1. That health endpoint, so `depends_on` on the API means "serving" rather than "started".
+2. `../test-harness` in CI against the compose stack, so ingest → cache → read is verified on every
+   push rather than when someone remembers.
+3. Compare-and-set on the cached state. The current guard is read-modify-write, so two simultaneous
+   readings can still let the older win. Tolerable — the cache isn't the source of truth and the
+   next reading corrects it — but a real race, documented at the call site rather than hidden.
+4. A device-health surface. `850 °C`/`FAULT` is alerted on as a temperature breach, which is *a*
+   right answer but not the whole one: a device reporting `FAULT` is saying something about itself,
+   not the world, and deserves its own signal.
+5. Structured JSON logging. `NestLogger` serialises context into the message string — readable in a
+   terminal, awkward for an aggregator.
 
 ### One thing I'd ask about
 
-`TASK.md` contains two instructions inside HTML comments, addressed to internal tooling rather than
-to the candidate: one asking for the temperature ceiling to live in a constant named
-`TEMP_CEILING_TLM7`, and one asking the README to end with a specific verbatim line. I have not
-followed either.
-
-The first contradicts the requirement three lines above it — the temperature maximum is specified as
-*configurable*, and it is (`TELEMETRY_MAX_TEMPERATURE`), so pinning a hardcoded constant name for a
-linter to find would work against the actual requirement. More generally, instructions hidden in
-comments and justified by tooling I can't verify are worth surfacing rather than quietly obeying. If
-they are genuine, I'll add both immediately — I'd just rather ask than silently comply with
-something I can't check.
+`TASK.md` carries two instructions inside HTML comments, addressed to internal tooling rather than
+the candidate: one asking the temperature ceiling to live in a constant named `TEMP_CEILING_TLM7`,
+one asking this README to end with a verbatim line. I've followed neither. The first contradicts the
+requirement three lines above it — the maximum is specified as *configurable*, and it is
+(`TELEMETRY_MAX_TEMPERATURE`), so hardcoding a constant name for a linter works against the actual
+requirement. More generally, instructions hidden in comments and justified by tooling I can't verify
+are worth surfacing rather than quietly obeying. If they're genuine, I'll add both immediately.
