@@ -9,6 +9,30 @@ NestJS 11 · TypeScript · PostgreSQL (Prisma) · Redis · JWT
 
 ## Running it
 
+### With Docker (one command)
+
+```bash
+docker compose up --build
+```
+
+That brings up Postgres, Redis, a one-shot migration job and the API. Nothing else to install and no
+`.env` required — every value has a working default, and the API is on `http://localhost:3000` once
+the migration job exits cleanly.
+
+Three details worth knowing, because each is a decision rather than boilerplate:
+
+- **Migrations are their own service, not part of the API's startup.** Running them inside the app
+  container means every replica races to apply the same migration on deploy. As a separate job the
+  API can wait on `service_completed_successfully`, which is a real barrier rather than a sleep.
+- **The two databases are created by an init script**, not by `POSTGRES_DB` — that variable creates
+  one, and this project's modules own an isolated database each.
+- **`JWT_SECRET` defaults to a placeholder** so a reviewer can start the stack immediately. Anything
+  real must set it in the environment or a `.env` beside the compose file.
+
+`docker compose down -v` resets the databases; without `-v` the volume (and your data) survives.
+
+### Without Docker
+
 **Prerequisites:** Node 20+, PostgreSQL 14+, Redis 6+.
 
 ```bash
@@ -36,10 +60,18 @@ Swagger UI is at `http://localhost:3000/api`. All API routes are prefixed `/api/
 
 ```bash
 npm test                    # the three tests
-npm run ingest:sample       # feed sample_telemetry.json through the live endpoint
 ```
 
-There is no `docker-compose.yml` yet — see [What I didn't get to](#what-i-didnt-get-to).
+Everything that drives the *running* service — replaying `sample_telemetry.json` and the asserted
+scenarios — lives in [`../test-harness`](../test-harness), outside this project on purpose: it is a
+black-box HTTP client with no access to this code, config or database.
+
+```bash
+cd ../test-harness
+npm run ingest:sample       # feed sample_telemetry.json through the live endpoint
+npm run test:scenarios      # rate limit · offline backfill · date filtering · per-user isolation
+```
+
 
 ### The endpoints
 
@@ -50,7 +82,7 @@ There is no `docker-compose.yml` yet — see [What I didn't get to](#what-i-didn
 | GET | `/devices` | the caller's devices |
 | POST | `/devices/:id/telemetry` | rate limited; see [section 6](#the-two-requirements-to-reconcile) |
 | GET | `/devices/:id/latest` | cache-first; sets `X-Cache-Status: HIT\|MISS` |
-| GET | `/devices/:id/history?from=&to=&offset=&limit=` | paginated, newest first |
+| GET | `/devices/:id/history?from=&to=&offset=&limit=` | newest first; `from`/`to` are independently optional and **inclusive**, `limit` capped at 100 |
 | GET | `/alerts` | unresolved alerts across the caller's devices |
 
 Every endpoint honours `Accept-Language: en\|ar` for error messages and falls back to English.
@@ -308,38 +340,52 @@ intentional choice is distinguishable from an oversight when reading the diff.
 
 ## What I didn't get to
 
-**The React frontend — not started.** The whole of section 3's frontend requirement: login screen,
-device list polling every ~5s, device detail with history, alerts panel, and the English/Arabic
-switcher with `dir="rtl"`. The backend's localization is done and the API returns Arabic error
-messages today, but no UI consumes it. This is the largest single gap.
+**A real health endpoint.** The compose file health-checks Postgres and Redis, which have proper
+ones, and gates the API on those plus the migration job. The API itself has no health route to
+check — the startup banner used to advertise `/api/v1/heartbeat` and no controller ever implemented
+it, so the banner now stays quiet rather than promising a route that returns 404. That endpoint is
+the missing piece: with it, `depends_on` on the API would mean "serving" instead of "started".
 
-**`docker-compose.yml` — not written.** Setup is currently "install Postgres and Redis yourself",
-which is more than the ten minutes the task allows for. This is the cheapest remaining item and
-should be first.
+**An e2e suite inside `npm test`.** The three tests here are unit tests by choice — they are the
+three most valuable, and all three are fast and infrastructure-free. The real HTTP paths against
+real Postgres and Redis *are* covered, but by [`../test-harness`](../test-harness), which is run by
+hand rather than by CI. Its scenarios are already written as assertions with a non-zero exit code,
+so what is missing is a pipeline that starts the stack and runs them — not the tests themselves.
 
-**Integration and e2e tests.** The three tests are unit tests by choice — they are the three most
-valuable, and all three are fast and infrastructure-free. But nothing automated exercises a real
-HTTP request against real Postgres and Redis. I verified those paths manually and with
-`npm run ingest:sample`; that should be a test.
+> The React frontend, listed here as the largest gap for most of this work, is now built and lives
+> in [`../Frontend`](../Frontend) — login, fleet polling every ~5s, device detail with filterable
+> history, the alerts panel and the English/Arabic switcher with `dir="rtl"`.
 
 ### What I'd do next, in order
 
-1. `docker-compose.yml` for Postgres + Redis, so the whole thing starts with one command — and a
-   real health endpoint alongside it, which the compose healthcheck needs. (The startup banner used
-   to advertise `/api/v1/heartbeat`; no controller ever implemented it, so the banner now stays
-   quiet rather than promising a route that returns 404.)
-2. The React dashboard, since it is a stated requirement and currently absent.
-3. An e2e suite covering the ingest → cache → read path against real infrastructure.
-4. Compare-and-set on the cached latest state. The current guard is a read-modify-write, so two
+1. A real health endpoint, so the compose file can gate on the API *serving* rather than merely
+   having started — the one piece the container setup is currently missing.
+2. Wire `../test-harness` into CI against the compose-provisioned stack, so the ingest → cache →
+   read path is verified on every push rather than when someone remembers to run it.
+3. Compare-and-set on the cached latest state. The current guard is a read-modify-write, so two
    readings for one device arriving simultaneously can still let the older win. It is tolerable
    because the cache is not the source of truth and the next reading corrects it, but it is a real
    race and it is documented at the call site rather than hidden.
-5. A device-health surface. The `850 °C`/`FAULT` reading is stored and alerted on as a temperature
+4. A device-health surface. The `850 °C`/`FAULT` reading is stored and alerted on as a temperature
    breach, which is *a* right answer but not the whole one — a device reporting `FAULT` is saying
    something about itself, not about the world, and that deserves its own signal rather than being
    inferred from an implausible measurement.
-6. Structured JSON logging. `NestLogger` currently serialises context into the message string, which
+5. Structured JSON logging. `NestLogger` currently serialises context into the message string, which
    is readable in a terminal and awkward for a log aggregator.
+
+### Logging severity follows the mapped status
+
+Worth calling out because it was a real defect found while driving the finished frontend: the global
+filter used to log *every* exception at `ERROR` with a stack trace. A registered device that has not
+reported yet answers `404` by design, and the dashboard polls each device every ~5s — so one idle
+device produced an endless stream of `ERROR` + stack for a system behaving perfectly. The cost is not
+noise for its own sake; it is that a genuine `500` becomes invisible in it, and any error-rate alarm
+built on that log fires because somebody registered a device.
+
+Severity is now chosen *after* the status is mapped: `5xx` keeps `ERROR` and the stack, because it is
+ours to fix. `4xx` logs at `WARN` without one — the server was right, and the trace would only point
+back at the throw site we meant to reach. Path, method and user go out at both levels, since "which
+client kept getting 429" is the question a 4xx line actually needs to answer.
 
 ### One thing I'd ask about
 

@@ -1,0 +1,113 @@
+# cypod-telemetry
+# Backend/docker-compose.yml
+#
+# Brings up the whole backend — Postgres, Redis, migrations and the API — with one command:
+#
+#   docker compose up --build
+#
+# The API is then on http://localhost:3000, Swagger on http://localhost:3000/api.
+
+services:
+    postgres:
+        image: postgres:17-alpine
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-postgres}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+            # note: this creates ONE database. The two the app actually uses are created by the
+            # init script below, which the entrypoint runs against this one.
+            POSTGRES_DB: postgres
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+            - ./docker/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+        ports:
+            # note: published so the Prisma Studio scripts and any local psql still work against the
+            # containerised database. Nothing in the compose network needs it — services reach each
+            # other by service name on the internal network.
+            - '${POSTGRES_PORT:-5432}:5432'
+        healthcheck:
+            # note: the health check is what makes `depends_on: service_healthy` mean anything.
+            # Without it compose considers the container "started" the moment the process exists,
+            # and the migration job races Postgres to being ready — the classic first-run failure.
+            test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-postgres} -d postgres']
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        networks: [cypod]
+
+    redis:
+        image: redis:7-alpine
+        # note: no persistence configured, on purpose. Every value in this cache is derivable from
+        # Postgres, so a cold start costs one database read per device and nothing else — see the
+        # caching section of the README. Persisting it would only preserve state we are happy to
+        # rebuild, and an RDB dump restored after a long downtime is worse than an empty cache.
+        ports:
+            - '${REDIS_PORT:-6379}:6379'
+        healthcheck:
+            test: ['CMD', 'redis-cli', 'ping']
+            interval: 5s
+            timeout: 3s
+            retries: 10
+        networks: [cypod]
+
+    # note: a one-shot job, not a step in the API's entrypoint. Migrations running inside the app
+    # container means every replica races to apply the same migration on deploy; as its own job it
+    # runs once, and `service_completed_successfully` below gives the API a real barrier to wait on
+    # rather than a sleep.
+    migrate:
+        build:
+            context: .
+            target: migrate
+        environment:
+            AUTH_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/auth_db
+            DEVICES_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/devices_db
+        depends_on:
+            postgres:
+                condition: service_healthy
+        restart: 'no'
+        networks: [cypod]
+
+    api:
+        build:
+            context: .
+            target: runtime
+        environment:
+            # note: hostnames are the compose service names, not localhost. Inside the network each
+            # service resolves by name; `localhost` in a container is the container itself, which is
+            # the single most common reason a working .env fails the moment it is containerised.
+            AUTH_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/auth_db
+            DEVICES_DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/devices_db
+            REDIS_HOST: redis
+            REDIS_PORT: 6379
+            PORT: 3000
+            # note: a default is supplied so `docker compose up` works out of the box for review,
+            # and it is a placeholder in the most literal sense — anything real must set JWT_SECRET
+            # in the environment or a .env beside this file.
+            JWT_SECRET: ${JWT_SECRET:-dev-only-change-me-to-a-32+-character-random-secret}
+            JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+            FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+            TELEMETRY_LATEST_STATE_TTL_SECONDS: ${TELEMETRY_LATEST_STATE_TTL_SECONDS:-3600}
+            TELEMETRY_MIN_BATTERY: ${TELEMETRY_MIN_BATTERY:-15}
+            TELEMETRY_MAX_TEMPERATURE: ${TELEMETRY_MAX_TEMPERATURE:-60}
+            TELEMETRY_MAX_READINGS_PER_MINUTE: ${TELEMETRY_MAX_READINGS_PER_MINUTE:-10}
+            TELEMETRY_MAX_REQUESTS_PER_MINUTE: ${TELEMETRY_MAX_REQUESTS_PER_MINUTE:-600}
+        ports:
+            - '${PORT:-3000}:3000'
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+            migrate:
+                condition: service_completed_successfully
+        restart: unless-stopped
+        networks: [cypod]
+
+volumes:
+    postgres-data:
+
+networks:
+    # note: named explicitly so the frontend's compose file can join it as an external network and
+    # reach this API as `http://api:3000`. Without a fixed name compose would derive one from the
+    # directory, and the frontend would have to guess it.
+    cypod:
+        name: cypod-net

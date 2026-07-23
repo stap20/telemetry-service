@@ -1,0 +1,18 @@
+# cypod-telemetry
+node_modules
+dist
+coverage
+
+# note: .env is excluded deliberately. Secrets reach the container through compose/the orchestrator
+# at run time; copying them into a layer would bake them into the image and every registry it is
+# pushed to, where a later `docker history` still shows them.
+.env
+.env.*
+!.env.example
+
+.git
+.gitignore
+*.md
+.vscode
+.idea
+npm-debug.log*

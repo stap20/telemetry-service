@@ -32,12 +32,6 @@ export class GlobalErrorFilter implements ExceptionFilter {
         const response = ctx.getResponse();
         const request = ctx.getRequest();
 
-        this.logger.error('Request failed', error, {
-            path: request.url,
-            method: request.method,
-            userId: request.user?.userId,
-        });
-
         let status = HttpStatus.INTERNAL_SERVER_ERROR;
         let message = 'Internal server error';
         let errorCode = 'INTERNAL_ERROR';
@@ -119,6 +113,8 @@ export class GlobalErrorFilter implements ExceptionFilter {
             errorCode = status.toString();
         }
 
+        this.log(error, status, request);
+
         response.status(status).json({
             statusCode: status,
             message,
@@ -129,6 +125,35 @@ export class GlobalErrorFilter implements ExceptionFilter {
             method: request.method,
             ...customData,
         });
+    }
+
+    // note: severity follows the MAPPED STATUS, which is why this runs after the mapping rather
+    // than at the top of catch(). Logging every exception at ERROR with a stack made ordinary
+    // client-side outcomes look like server faults: a registered device that has not reported yet
+    // answers 404 by design, and the UI polls each device every few seconds, so a single idle
+    // device produced an endless stream of ERROR + stack trace. The cost is not noise for its own
+    // sake — it is that a real 500 becomes invisible in it, and any "error rate" alert built on
+    // this log fires because someone registered a device.
+    //
+    // 5xx is ours to fix, so it keeps the stack. 4xx is the server working correctly and telling
+    // the caller something true, so it is logged as a warning WITHOUT a stack — the trace would
+    // only point back at the throw site we already meant to reach. The path/method/user still go
+    // out at both levels, because "which client kept getting 429" is the question actually worth
+    // answering from a 4xx line.
+    private log(error: Error, status: number, request: any): void {
+        const context = {
+            statusCode: status,
+            path: request.url,
+            method: request.method,
+            userId: request.user?.userId,
+        };
+
+        if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+            this.logger.error('Request failed', error, context);
+            return;
+        }
+
+        this.logger.warn(`Request rejected: ${error.message}`, context);
     }
 
     // note: keeps ALL Prisma messages generic and English — never the driver's raw text, which can
