@@ -7,6 +7,10 @@ export class ValueValidator {
     // UUID: a physical device carries its own vendor id, so we constrain the shape without dictating
     // the scheme. Bounding length + charset here also keeps junk/control chars out of the persisted id.
     static DEVICE_ID_PATTERN = /^[a-zA-Z0-9._-]{3,100}$/;
+    static LATITUDE_MIN = -90;
+    static LATITUDE_MAX = 90;
+    static LONGITUDE_MIN = -180;
+    static LONGITUDE_MAX = 180;
 
     static isEmpty(value: string): boolean {
         return !value || value.trim().length === 0;
@@ -80,5 +84,34 @@ export class ValueValidator {
 
     static isValidDeviceId(value: string): boolean {
         return this.DEVICE_ID_PATTERN.test(value);
+    }
+
+    // note: telemetry arrives as raw JSON numbers, so `isNumberInRange` alone is not enough — NaN and
+    // Infinity pass a naive >=/<= comparison in JS. Every numeric telemetry check goes through
+    // isFiniteNumber first, which is why these live here rather than as inline guards in each VO.
+    static isFiniteNumber(value: number): boolean {
+        return typeof value === 'number' && Number.isFinite(value);
+    }
+
+    static isInteger(value: number): boolean {
+        return Number.isInteger(value);
+    }
+
+    static isLatitude(value: number): boolean {
+        return (
+            this.isFiniteNumber(value) &&
+            this.isNumberInRange(value, this.LATITUDE_MIN, this.LATITUDE_MAX)
+        );
+    }
+
+    static isLongitude(value: number): boolean {
+        return (
+            this.isFiniteNumber(value) &&
+            this.isNumberInRange(value, this.LONGITUDE_MIN, this.LONGITUDE_MAX)
+        );
+    }
+
+    static isValidDate(value: Date): boolean {
+        return value instanceof Date && !Number.isNaN(value.getTime());
     }
 }
